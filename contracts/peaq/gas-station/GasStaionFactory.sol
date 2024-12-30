@@ -14,8 +14,8 @@ interface IERC20 {
 }
 
 contract GasStationFactory {
-    uint256 constant MIN_BALANCE = 0.33 * 1e18; // 0.33 tokens in 18 decimals
-    uint256 constant FUNDING_AMOUNT = 0.5 * 1e18; // 0.5 tokens in 18 decimals
+    uint256 constant MIN_BALANCE = 0.01 * 1e18; // 0.01 tokens in 18 decimals
+    uint256 constant FUNDING_AMOUNT = 0.05 * 1e18; // 0.05 tokens in 18 decimals
     address constant PEAQ_RBAC =
         address(0x0000000000000000000000000000000000000802); // peaq RBAC contract address
     address constant PEAQ_DID =
@@ -23,7 +23,7 @@ contract GasStationFactory {
     address constant PEAQ_STORAGE =
         address(0x0000000000000000000000000000000000000801); // peaq storage contract address
     address constant FUNDING_TOKEN =
-        address(0x0000000000000000000000000000000000000809); // AGUNG token contract address
+        address(0x0000000000000000000000000000000000000809); // PEAQ token contract address
     address public owner; // Owner of the Gas station Factory
     address public gasStation; // Authorized relayer or gas station address that authorize all tx
     mapping(uint256 => bool) private usedNonces; // nonces used for replay protection
