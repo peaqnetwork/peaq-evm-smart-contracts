@@ -1,0 +1,30 @@
+{
+  "name": "peaq-evm-smart-contracts",
+  "version": "1.0.0",
+  "description": "Official evm contracts on peaq networks created to help builders on the network.",
+  "keywords": [
+    "evm",
+    "peaq",
+    "solidity",
+    "smart",
+    "contracts"
+  ],
+  "homepage": "https://github.com/peaqnetwork/peaq-evm-smart-contracts#readme",
+  "bugs": {
+    "url": "https://github.com/peaqnetwork/peaq-evm-smart-contracts/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/peaqnetwork/peaq-evm-smart-contracts.git"
+  },
+  "license": "Apache-2.0",
+  "author": "peaq network",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0"
+  }
+}
