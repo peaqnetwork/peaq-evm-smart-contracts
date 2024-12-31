@@ -52,8 +52,41 @@ async function deployMachineSmartAccount(
 
     const receipt = await sendTransaction(methodData, 300000);
 
-    // Type assertion to ensure the correct type
-    const deployedAddress = (receipt.events?.MachineSmartAccountDeployed?.returnValues?.deployedAddress as string);
+    // Check if events are directly available
+    if (receipt.events?.MachineSmartAccountDeployed?.returnValues?.deployedAddress) {
+        return receipt.events.MachineSmartAccountDeployed.returnValues.deployedAddress as string;
+    }
+
+    // Parse logs manually if events are not populated
+    const logs = receipt.logs;
+    const eventAbi = {
+        name: "MachineSmartAccountDeployed",
+        type: "event",
+        inputs: [
+            {
+                indexed: false, 
+                name: "deployedAddress",
+                type: "address",
+            },
+        ],
+    };
+    
+
+    const eventSignature = web3.eth.abi.encodeEventSignature(eventAbi);
+    const log = logs.find((log) => log?.topics?.[0] === eventSignature);
+
+    if (!log) {
+        throw new Error('MachineSmartAccountDeployed event not found in logs');
+    }
+
+    // Decode the event data
+    const decodedLog = web3.eth.abi.decodeLog(
+        eventAbi.inputs as any,
+        log.data as string,
+        log.topics?.slice(1) as string[]
+    );
+
+    const deployedAddress = decodedLog.deployedAddress as string;
 
     if (!deployedAddress) {
         throw new Error('Failed to retrieve deployed MachineSmartAccount address');
