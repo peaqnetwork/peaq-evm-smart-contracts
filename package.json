@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.1.0",
+    "@peaq-network/sdk": "^0.7.2",
     "ethers": "^6.13.4",
     "web3": "^4.16.0"
   },
