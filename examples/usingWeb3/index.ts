@@ -1,10 +1,13 @@
 import Web3 from 'web3';
 import { AbiItem } from 'web3-utils';
 import { TransactionReceipt } from 'web3-types';
+import { Sdk } from '@peaq-network/sdk';
 
 // Import the contract ABI
 import { abi } from '../GasStationFactoryABI.json';
 import { AbiCoder, ethers } from 'ethers';
+
+let machineAddress = "" // to be replaced after submitDeployMachineSmartAccountTx is triggered
 
 // Web3 setup
 const web3 = new Web3('YOUR_ETHEREUM_NODE_URL'); // Replace with your Ethereum node URL
@@ -148,11 +151,17 @@ function generateEoaSignature(machineAddress: string, target: string, data: stri
     return signature
 }
 
-// Example usage
-(async () => {
+async function submitDeployMachineSmartAccountTx() {
+    const eoa = '0xEOAAddress'; // Replace with actual EOA (machine owner) address - EOA == "Externally Owned Address"
+        const nonce = 1; // Example nonce
+
+    const deploySignature = generateOwnerDeploySignature(eoa, nonce)
+    machineAddress = await deployMachineSmartAccount(eoa, nonce, deploySignature);
+
+}
+    async function submitStorageTx() {
     try {
-        const newGasStation = '0xNewGasStationAddress'; // Replace with actual address
-        const eoa = '0xEOAAddress'; // Replace with actual EOA address
+        const eoa = '0xEOAAddress'; // Replace with actual EOA (machine owner) address - EOA == "Externally Owned Address"
         const nonce = 1; // Example nonce
         const target = '0x0000000000000000000000000000000000000801'; // Replace with the target contract address
 
@@ -175,8 +184,6 @@ function generateEoaSignature(machineAddress: string, target: string, data: stri
 
         const calldata = params.replace("0x", addItemFunctionSelector);
         
-        const deploySignature = generateOwnerDeploySignature(eoa, nonce)
-        const machineAddress = await deployMachineSmartAccount(eoa, nonce, deploySignature);
 
         const eoaSignature = generateEoaSignature(machineAddress, target, calldata, nonce)
         const ownerSignature = generateOwnerSignature(eoa, target, calldata, nonce)
@@ -185,4 +192,79 @@ function generateEoaSignature(machineAddress: string, target: string, data: stri
     } catch (error) {
         console.error('Error:', error);
     }
+}
+
+const generateDIDHash = async () => {
+    const customFields = {
+      prefix: 'peaq',
+      controller: '5FEw7aWmqcnWDaMcwjKyGtJMjQfqYGxXmDWKVfcpnEPmUM7q',
+      verifications: [
+        {
+          type: 'Ed25519VerificationKey2020'
+        }
+      ],
+      signature: {
+        type: 'Ed25519VerificationKey2020',
+        issuer: '5Df42mkztLtkksgQuLy4YV6hmhzdjYvDknoxHv1QBkaY12Pg',
+        hash: '0x12345'
+      },
+      services: [
+        {
+          id: '#emailSignature',
+          type: 'emailSignature',
+          data: '0e816a00d228a6d215542334e51a01eb3280d202fe2324abe75bb8b4acaec4207cc00106e830d493603305f797706a0ef1952c44ea9f9b44c0b3ccc3d4bc758b'
+        },
+      ]
+    }
+
+    const did_hash = await Sdk.generateDidDocument({ address: "5FEw7aWmqcnWDaMcwjKyGtJMjQfqYGxXmDWKVfcpnEPmUM7q", customDocumentFields: customFields });
+    return did_hash;
+  };
+
+async function submitDIDTx() {
+    try {
+        const eoa = '0xEOAAddress'; // Replace with actual EOA (machine owner) address - EOA == "Externally Owned Address"
+        const nonce = 1; // Example nonce
+        const target = '0x0000000000000000000000000000000000000800'; // target contract address - DID contract address
+
+        const abiCoder = new AbiCoder()
+
+        const addAttributeFunctionSignature = "addAttribute(address,bytes,bytes,uint32)";
+        const createDidFunctionSelector = ethers.keccak256(ethers.toUtf8Bytes(addAttributeFunctionSignature)).substring(0, 10);
+
+        let now = new Date().getTime();
+
+        const didAddress = "5FEw7aWmqcnWDaMcwjKyGtJMjQfqYGxXmDWKVfcpnEPmUM7q";
+        const didName = `did:peaq:${didAddress}#test`
+        const name = ethers.hexlify(ethers.toUtf8Bytes(didName));
+
+        const value = (await generateDIDHash()).value;
+
+        const validityFor = 0;
+
+        const params = abiCoder.encode(
+        ["address", "bytes", "bytes", "uint32"],
+        [didAddress, name, value, validityFor]
+        );
+
+        const calldata = params.replace("0x", createDidFunctionSelector);
+
+        
+        const eoaSignature = generateEoaSignature(machineAddress, target, calldata, nonce)
+        const ownerSignature = generateOwnerSignature(eoa, target, calldata, nonce)
+
+        await executeTransaction(eoa, machineAddress, target, calldata, nonce, ownerSignature, eoaSignature);
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
+
+
+// Example usage
+(async () => {
+
+    await submitDeployMachineSmartAccountTx();
+    await submitStorageTx();
+    await submitDIDTx();
+    
 })();
