@@ -15,34 +15,56 @@ contract GasRefundFactory is EIP712, AccessControl {
     // This role approves refundable transactions
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     // The target address which tx are approved to be refunded
-    bytes32 public constant REFUNDABLE_TARGET_CALL_ROLE = keccak256("REFUNDABLE_TARGET_CALL_ROLE");
+    bytes32 public constant REFUNDABLE_TARGET_CALL_ROLE =
+        keccak256("REFUNDABLE_TARGET_CALL_ROLE");
+    bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY =
+        keccak256("TX_FEE_REFUND_AMOUNT_KEY");
 
     // EIP-712 type hashes
 
-    bytes32 private constant TRANSFER_BALANCE_TYPEHASH =
-        keccak256("TransferBalance(address recipient,uint256 nonce)");
-
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce)");
+        keccak256(
+            "ExecuteTransaction(address target,bytes data,uint256 nonce)"
+        );
+    bytes32
+        private constant EXECUTE_TRANSACTION_WITH_CUSTOM_REFUND_AMOUNT_TYPEHASH =
+        keccak256(
+            "ExecuteTransactionWithCustomRefundAmount(address target,bytes data,uint256 nonce,uint256 refundAmount)"
+        );
 
     mapping(uint256 => bool) private usedNonces;
+    mapping(bytes32 => uint256) public configs;
 
-    constructor(address admin, address manager) EIP712("GasRefundFactory", "1") {
+    constructor(
+        address admin,
+        address manager,
+        uint256 _refundAmount
+    ) EIP712("GasRefundFactory", "1") {
         if (admin == address(0)) revert Errors.ZeroAddress();
         if (manager == address(0)) revert Errors.ZeroAddress();
+
+        configs[TX_FEE_REFUND_AMOUNT_KEY] = _refundAmount;
+
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(MANAGER_ROLE, admin);
         _grantRole(MANAGER_ROLE, manager);
         _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_DID);
         _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_RBAC);
         _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_STORAGE);
     }
 
+    function updateConfigs(bytes32 key, uint256 value)
+        external
+        onlyRole(MANAGER_ROLE)
+    {
+        configs[key] = value;
+    }
+
     /**
      * @dev Transfer the contract balance to a recipient: useful in the event this contract is deprecated.
      * @param recipient The recipient address
-     * @param signature The signature verifying the contract manager tx approval.
      */
-    function transferBalance(address recipient, uint256 nonce, bytes calldata signature)
+    function transferBalance(address recipient, uint256 nonce)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
@@ -50,18 +72,21 @@ contract GasRefundFactory is EIP712, AccessControl {
         if (recipient == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
-        bytes32 structHash = keccak256(abi.encode(TRANSFER_BALANCE_TYPEHASH, recipient, nonce));
-
-        if (!_verifySignature(structHash, signature, nonce)) {
-            revert Errors.InvalidOwnerSignature(structHash, nonce);
-        }
         usedNonces[nonce] = true;
 
-        uint256 contractBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(address(this));
-        IERC20(Constants.FUNDING_TOKEN).safeTransfer(recipient, contractBalance);
+        uint256 contractBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(
+            address(this)
+        );
+        IERC20(Constants.FUNDING_TOKEN).safeTransfer(
+            recipient,
+            contractBalance
+        );
 
         emit Events.MachineStationBalanceTransferred(
-            address(this), recipient, contractBalance, nonce
+            address(this),
+            recipient,
+            contractBalance,
+            nonce
         );
     }
 
@@ -72,20 +97,75 @@ contract GasRefundFactory is EIP712, AccessControl {
      * @param data The calldata for the transaction sent to the target contract address
      * @param signature The signature verifying the owner's tx approval.
      */
-    function executeTransaction(address target, bytes calldata data, uint256 nonce, bytes calldata signature)
-        external
-    {
+    function executeTransaction(
+        address target,
+        bytes calldata data,
+        uint256 nonce,
+        bytes calldata signature
+    ) external {
         if (target == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
-        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                EXECUTE_TRANSACTION_TYPEHASH,
+                target,
+                keccak256(data),
+                nonce
+            )
+        );
 
         if (!_verifySignature(structHash, signature, nonce)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
         }
 
+        _refundTxFees(msg.sender, configs[TX_FEE_REFUND_AMOUNT_KEY]);
+
         usedNonces[nonce] = true;
-        (bool success,) = target.call(data);
+        (bool success, ) = target.call(data);
+
+        if (!success) {
+            revert Errors.TargetCallFailed(target);
+        }
+
+        emit Events.TransactionExecuted(target, data, nonce, msg.sender);
+    }
+
+    /**
+     * @dev Execute a transaction via the gas refund factory contract.
+     * The target contract address that will trigger the final target call
+     * @param target The target contract address where the call data will be executed
+     * @param data The calldata for the transaction sent to the target contract address
+     * @param signature The signature verifying the owner's tx approval.
+     */
+    function executeTransactionWithCustomRefundAmount(
+        address target,
+        bytes calldata data,
+        uint256 nonce,
+        uint256 refundAmount,
+        bytes calldata signature
+    ) external {
+        if (target == address(0)) revert Errors.ZeroAddress();
+        if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                EXECUTE_TRANSACTION_WITH_CUSTOM_REFUND_AMOUNT_TYPEHASH,
+                target,
+                keccak256(data),
+                nonce,
+                refundAmount
+            )
+        );
+
+        if (!_verifySignature(structHash, signature, nonce)) {
+            revert Errors.InvalidOwnerSignature(structHash, nonce);
+        }
+
+        _refundTxFees(msg.sender, refundAmount);
+
+        usedNonces[nonce] = true;
+        (bool success, ) = target.call(data);
 
         if (!success) {
             revert Errors.TargetCallFailed(target);
@@ -104,13 +184,18 @@ contract GasRefundFactory is EIP712, AccessControl {
      * @param signature The signature to verify.
      * @param nonce Protects against replay attack.
      */
-    function _verifySignature(bytes32 structHash, bytes memory signature, uint256 nonce) internal view returns (bool) {
+    function _verifySignature(
+        bytes32 structHash,
+        bytes memory signature,
+        uint256 nonce
+    ) internal view returns (bool) {
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, signature);
 
-        return hasRole(DEFAULT_ADMIN_ROLE, signer);
+        return (hasRole(DEFAULT_ADMIN_ROLE, signer) ||
+            hasRole(MANAGER_ROLE, signer));
     }
 
     /**
@@ -125,7 +210,20 @@ contract GasRefundFactory is EIP712, AccessControl {
         return keccak256(abi.encodePacked(encoded));
     }
 
-    
+    function _refundTxFees(address sender, uint256 amount) private {
+        // Transfer tokens with balance validation
+        // This transfer is only done if fundding token is not null and refund amount is > 0
+        if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
+            // Fetch sender's balance
+            uint256 senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
+
+            // Check if the sender balance is less than tx fee amount before refund
+            if (senderBalance <= amount) {
+                // Refund the sender address
+                IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
+            }
+        }
+    }
 
     // Note: "Unable to determine contract standard" error is throw during native token transfer
     // to the contract address when using metamask (other wallet provider not tested though)
