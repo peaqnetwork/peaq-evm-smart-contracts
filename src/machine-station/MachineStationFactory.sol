@@ -15,6 +15,13 @@ contract MachineStationFactory is EIP712, AccessControl {
 
     bytes32 public constant STATION_MANAGER_ROLE = keccak256("STATION_MANAGER_ROLE");
     bytes32 public constant REQUIRED_STORAGE_DEPOSIT_FEE_ROLE = keccak256("REQUIRED_STORAGE_DEPOSIT_FEE_ROLE");
+    // The target address which tx are approved to be refunded
+    bytes32 public constant REFUNDABLE_TARGET_CALL_ROLE =
+        keccak256("REFUNDABLE_TARGET_CALL_ROLE");
+    bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY =
+        keccak256("TX_FEE_REFUND_AMOUNT");
+    bytes32 public constant IS_REFUND_ENABLED_KEY =
+        keccak256("IS_REFUND_ENABLED");
 
     // EIP-712 type hashes
     bytes32 private constant DEPLOY_MACHINE_TYPEHASH =
@@ -37,15 +44,33 @@ contract MachineStationFactory is EIP712, AccessControl {
         keccak256("ExecuteMachineTransferBalance(address machineAddress,address recipientAddress,uint256 nonce)");
 
     mapping(uint256 => bool) private usedNonces;
+    mapping(bytes32 => uint256) public configs;
 
-    constructor(address admin, address stationManager) EIP712("MachineStationFactory", "1") {
+    constructor(address admin, address stationManager, uint256 _txRefundAmount) EIP712("MachineStationFactory", "1") {
         if (admin == address(0)) revert Errors.ZeroAddress();
         if (stationManager == address(0)) revert Errors.ZeroAddress();
+
+        // set the refund amount per tx
+        configs[TX_FEE_REFUND_AMOUNT_KEY] = _txRefundAmount;
+        // enable refund by default. set this to 0 to disable refund
+        configs[IS_REFUND_ENABLED_KEY] = 1;
+
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(STATION_MANAGER_ROLE, admin);
         _grantRole(STATION_MANAGER_ROLE, stationManager);
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_DID);
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_RBAC);
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_STORAGE);
+        _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_DID);
+        _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_RBAC);
+        _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_STORAGE);
+    }
+
+    function updateConfigs(bytes32 key, uint256 value)
+        external
+        onlyRole(STATION_MANAGER_ROLE)
+    {
+        configs[key] = value;
     }
 
     /**
@@ -71,6 +96,9 @@ contract MachineStationFactory is EIP712, AccessControl {
         // Deploy a new instance of MachineSmartAccount
         MachineSmartAccount newMachineSmartAccount = new MachineSmartAccount(machineOwner, address(this));
 
+        // fund the machine owner with the first tx fee needed to trigger the first tx
+        _refundTxFees(machineOwner, configs[TX_FEE_REFUND_AMOUNT_KEY]);
+        
         emit Events.MachineSmartAccountDeployed(address(newMachineSmartAccount));
         return address(newMachineSmartAccount);
     }
@@ -110,9 +138,8 @@ contract MachineStationFactory is EIP712, AccessControl {
      * @param data The calldata for the transaction sent to the target contract address
      * @param signature The signature verifying the owner's tx approval.
      */
-    function executeTransaction(address target, bytes calldata data, uint256 nonce, bytes calldata signature)
+    function executeTransaction(address target, bytes calldata data, uint256 nonce, uint256 refundAmount, bytes calldata signature)
         external
-        onlyRole(STATION_MANAGER_ROLE)
     {
         if (target == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
@@ -124,6 +151,14 @@ contract MachineStationFactory is EIP712, AccessControl {
         }
 
         usedNonces[nonce] = true;
+        uint256 txFeeRefundAmount = refundAmount;
+
+        // use default refund amount if custom refund amount is not supplied
+        if (txFeeRefundAmount < 1) {
+            txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
+        }
+        _refundTxFees(msg.sender, txFeeRefundAmount);
+
         (bool success,) = target.call(data);
 
         if (!success) {
@@ -146,9 +181,10 @@ contract MachineStationFactory is EIP712, AccessControl {
         address target,
         bytes calldata data,
         uint256 nonce,
+        uint256 refundAmount,
         bytes calldata signature,
         bytes calldata machineOwnerSignature
-    ) external onlyRole(STATION_MANAGER_ROLE) {
+    ) external {
         if (machineAddress == address(0)) revert Errors.ZeroAddress(); // Machine address cannot be zero
         if (target == address(0)) revert Errors.ZeroAddress(); // Target address cannot be zero
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
@@ -162,6 +198,13 @@ contract MachineStationFactory is EIP712, AccessControl {
         }
 
         usedNonces[nonce] = true;
+        uint256 txFeeRefundAmount = refundAmount;
+
+        // use default refund amount if custom refund amount is not supplied
+        if (txFeeRefundAmount < 1) {
+            txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
+        }
+        _refundTxFees(msg.sender, txFeeRefundAmount);
 
         _fundStorageDepositFees(machineAddress, target);
 
@@ -182,10 +225,11 @@ contract MachineStationFactory is EIP712, AccessControl {
         address[] memory targets,
         bytes[] calldata data,
         uint256 nonce,
+        uint256 refundAmount,
         uint256[] memory machineNonces,
         bytes calldata signature,
         bytes[] calldata machineOwnerSignatures
-    ) external onlyRole(STATION_MANAGER_ROLE) {
+    ) external {
         if (machineAddresses.length < 1) revert Errors.ZeroAddress(); // Machine address cannot be zero
         if (targets.length < 1) revert Errors.ZeroAddress(); // Target addresses cannot be zero
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
@@ -209,6 +253,13 @@ contract MachineStationFactory is EIP712, AccessControl {
         }
 
         usedNonces[nonce] = true;
+        uint256 txFeeRefundAmount = refundAmount;
+
+        // use default refund amount if custom refund amount is not supplied
+        if (txFeeRefundAmount < 1) {
+            txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
+        }
+        _refundTxFees(msg.sender, txFeeRefundAmount);
 
         for (uint256 i = 0; i < machineAddresses.length; i++) {
             _fundStorageDepositFees(machineAddresses[i], targets[i]);
@@ -299,6 +350,24 @@ contract MachineStationFactory is EIP712, AccessControl {
             if (machineBalance <= Constants.MIN_BALANCE) {
                 // Fund the machine adress balance
                 IERC20(Constants.FUNDING_TOKEN).safeTransfer(machineAddress, Constants.FUNDING_AMOUNT);
+            }
+        }
+    }
+
+    function _refundTxFees(address sender, uint256 amount) private {
+        //  only refund tx fees if enabled
+        if (configs[IS_REFUND_ENABLED_KEY] > 0) {
+            // Transfer tokens with balance validation
+            // This transfer is only done if fundding token is not null and refund amount is > 0
+            if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
+                // Fetch sender's balance
+                uint256 senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
+
+                // Check if the sender balance is less than tx fee amount before refund
+                if (senderBalance <= amount) {
+                    // Refund the sender address
+                    IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
+                }
             }
         }
     }

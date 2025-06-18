@@ -124,11 +124,10 @@ contract GasRefundFactory is EIP712, AccessControl {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
         }
 
+        usedNonces[nonce] = true;
         _refundTxFees(msg.sender, configs[TX_FEE_REFUND_AMOUNT_KEY]);
 
-        usedNonces[nonce] = true;
         (bool success, ) = target.call(data);
-
         if (!success) {
             revert Errors.TargetCallFailed(target);
         }
