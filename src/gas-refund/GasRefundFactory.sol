@@ -18,7 +18,9 @@ contract GasRefundFactory is EIP712, AccessControl {
     bytes32 public constant REFUNDABLE_TARGET_CALL_ROLE =
         keccak256("REFUNDABLE_TARGET_CALL_ROLE");
     bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY =
-        keccak256("TX_FEE_REFUND_AMOUNT_KEY");
+        keccak256("TX_FEE_REFUND_AMOUNT");
+    bytes32 public constant IS_REFUND_ENABLED_KEY =
+        keccak256("IS_REFUND_ENABLED");
 
     // EIP-712 type hashes
 
@@ -43,7 +45,10 @@ contract GasRefundFactory is EIP712, AccessControl {
         if (admin == address(0)) revert Errors.ZeroAddress();
         if (manager == address(0)) revert Errors.ZeroAddress();
 
+        // set the refund amount per tx
         configs[TX_FEE_REFUND_AMOUNT_KEY] = _refundAmount;
+        // enable refund by default. set this to 0 to disable refund
+        configs[IS_REFUND_ENABLED_KEY] = 1;
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MANAGER_ROLE, admin);
@@ -211,16 +216,19 @@ contract GasRefundFactory is EIP712, AccessControl {
     }
 
     function _refundTxFees(address sender, uint256 amount) private {
-        // Transfer tokens with balance validation
-        // This transfer is only done if fundding token is not null and refund amount is > 0
-        if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
-            // Fetch sender's balance
-            uint256 senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
+        //  only refund tx fees if enabled
+        if (configs[IS_REFUND_ENABLED_KEY] > 0) {
+            // Transfer tokens with balance validation
+            // This transfer is only done if fundding token is not null and refund amount is > 0
+            if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
+                // Fetch sender's balance
+                uint256 senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
 
-            // Check if the sender balance is less than tx fee amount before refund
-            if (senderBalance <= amount) {
-                // Refund the sender address
-                IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
+                // Check if the sender balance is less than tx fee amount before refund
+                if (senderBalance <= amount) {
+                    // Refund the sender address
+                    IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
+                }
             }
         }
     }
