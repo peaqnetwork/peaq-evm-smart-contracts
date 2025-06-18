@@ -31,13 +31,13 @@ contract MachineStationFactory is EIP712, AccessControl {
         keccak256("TransferMachineStationBalance(address newMachineStationAddress,uint256 nonce)");
 
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce)");
+        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
     bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce)");
+        keccak256("ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
     bytes32 private constant EXECUTE_MACHINE_BATCH_TRANSACTIONS_TYPEHASH = keccak256(
-        "ExecuteMachineBatchTransactions(address[] machineAddresses,address[] targets,bytes[] data,uint256 nonce,uint256[] machineNonces)"
+        "ExecuteMachineBatchTransactions(address[] machineAddresses,address[] targets,bytes[] data,uint256 nonce,uint256 refundAmount,uint256[] machineNonces)"
     );
 
     bytes32 private constant EXECUTE_MACHINE_TRANSFER_TYPEHASH =
@@ -98,7 +98,7 @@ contract MachineStationFactory is EIP712, AccessControl {
 
         // fund the machine owner with the first tx fee needed to trigger the first tx
         _refundTxFees(machineOwner, configs[TX_FEE_REFUND_AMOUNT_KEY]);
-        
+
         emit Events.MachineSmartAccountDeployed(address(newMachineSmartAccount));
         return address(newMachineSmartAccount);
     }
@@ -144,7 +144,7 @@ contract MachineStationFactory is EIP712, AccessControl {
         if (target == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
-        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce));
+        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
         if (!_verifySignature(structHash, signature, nonce)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
@@ -191,7 +191,7 @@ contract MachineStationFactory is EIP712, AccessControl {
 
         // Verify the owner's signature
         bytes32 structHash =
-            keccak256(abi.encode(EXECUTE_MACHINE_TRANSACTION_TYPEHASH, machineAddress, target, keccak256(data), nonce));
+            keccak256(abi.encode(EXECUTE_MACHINE_TRANSACTION_TYPEHASH, machineAddress, target, keccak256(data), nonce, refundAmount));
 
         if (!_verifySignature(structHash, signature, nonce)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce); // Invalid Machine Station Owner signature
@@ -244,6 +244,7 @@ contract MachineStationFactory is EIP712, AccessControl {
                 keccak256(abi.encodePacked(targets)),
                 _hashData(data),
                 nonce,
+                refundAmount,
                 keccak256(abi.encodePacked(machineNonces))
             )
         );

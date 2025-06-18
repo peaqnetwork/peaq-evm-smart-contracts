@@ -26,12 +26,7 @@ contract GasRefundFactory is EIP712, AccessControl {
 
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
         keccak256(
-            "ExecuteTransaction(address target,bytes data,uint256 nonce)"
-        );
-    bytes32
-        private constant EXECUTE_TRANSACTION_WITH_CUSTOM_REFUND_AMOUNT_TYPEHASH =
-        keccak256(
-            "ExecuteTransactionWithCustomRefundAmount(address target,bytes data,uint256 nonce,uint256 refundAmount)"
+            "ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)"
         );
 
     mapping(uint256 => bool) private usedNonces;
@@ -100,49 +95,11 @@ contract GasRefundFactory is EIP712, AccessControl {
      * The target contract address that will trigger the final target call
      * @param target The target contract address where the call data will be executed
      * @param data The calldata for the transaction sent to the target contract address
+     * @param nonce Protects against replay attack.
+     * @param refundAmount Used to set custom tx refund amount
      * @param signature The signature verifying the owner's tx approval.
      */
     function executeTransaction(
-        address target,
-        bytes calldata data,
-        uint256 nonce,
-        bytes calldata signature
-    ) external {
-        if (target == address(0)) revert Errors.ZeroAddress();
-        if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
-
-        bytes32 structHash = keccak256(
-            abi.encode(
-                EXECUTE_TRANSACTION_TYPEHASH,
-                target,
-                keccak256(data),
-                nonce
-            )
-        );
-
-        if (!_verifySignature(structHash, signature, nonce)) {
-            revert Errors.InvalidOwnerSignature(structHash, nonce);
-        }
-
-        usedNonces[nonce] = true;
-        _refundTxFees(msg.sender, configs[TX_FEE_REFUND_AMOUNT_KEY]);
-
-        (bool success, ) = target.call(data);
-        if (!success) {
-            revert Errors.TargetCallFailed(target);
-        }
-
-        emit Events.TransactionExecuted(target, data, nonce, msg.sender);
-    }
-
-    /**
-     * @dev Execute a transaction via the gas refund factory contract.
-     * The target contract address that will trigger the final target call
-     * @param target The target contract address where the call data will be executed
-     * @param data The calldata for the transaction sent to the target contract address
-     * @param signature The signature verifying the owner's tx approval.
-     */
-    function executeTransactionWithCustomRefundAmount(
         address target,
         bytes calldata data,
         uint256 nonce,
@@ -154,7 +111,7 @@ contract GasRefundFactory is EIP712, AccessControl {
 
         bytes32 structHash = keccak256(
             abi.encode(
-                EXECUTE_TRANSACTION_WITH_CUSTOM_REFUND_AMOUNT_TYPEHASH,
+                EXECUTE_TRANSACTION_TYPEHASH,
                 target,
                 keccak256(data),
                 nonce,
@@ -166,11 +123,16 @@ contract GasRefundFactory is EIP712, AccessControl {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
         }
 
-        _refundTxFees(msg.sender, refundAmount);
-
         usedNonces[nonce] = true;
-        (bool success, ) = target.call(data);
+        uint256 txFeeRefundAmount = refundAmount;
 
+        // use default refund amount if custom refund amount is not supplied
+        if (txFeeRefundAmount < 1) {
+            txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
+        }
+        _refundTxFees(msg.sender, txFeeRefundAmount);
+
+        (bool success, ) = target.call(data);
         if (!success) {
             revert Errors.TargetCallFailed(target);
         }
