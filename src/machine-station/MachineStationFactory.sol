@@ -22,6 +22,8 @@ contract MachineStationFactory is EIP712, AccessControl {
         keccak256("TX_FEE_REFUND_AMOUNT");
     bytes32 public constant IS_REFUND_ENABLED_KEY =
         keccak256("IS_REFUND_ENABLED");
+    bytes32 public constant MIN_BALANCE_KEY = keccak256("MIN_BALANCE");
+    bytes32 public constant FUNDING_AMOUNT_KEY = keccak256("FUNDING_AMOUNT");
 
     // EIP-712 type hashes
     bytes32 private constant DEPLOY_MACHINE_TYPEHASH =
@@ -54,6 +56,12 @@ contract MachineStationFactory is EIP712, AccessControl {
         configs[TX_FEE_REFUND_AMOUNT_KEY] = _txRefundAmount;
         // enable refund by default. set this to 0 to disable refund
         configs[IS_REFUND_ENABLED_KEY] = 1;
+        // minimum balance an address should have before storage deposit funding is triggered
+        // set to PEAQ's default: 0.01 tokens in 18 decimals
+        configs[MIN_BALANCE_KEY] = 10000000000000000;
+        // funding amount transferred to an address for storage deposit payment
+        // set to PEAQ's default: 0.05 tokens in 18 decimals
+        configs[FUNDING_AMOUNT_KEY] = 50000000000000000;
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(STATION_MANAGER_ROLE, admin);
@@ -348,9 +356,9 @@ contract MachineStationFactory is EIP712, AccessControl {
             // Check if the machine balance is less than min balance before funding it
             // This is added because each machine account is required to pay a storage deposit fees by the peaq storage, rbac and did contracts
             // while using the on-chain storage
-            if (machineBalance <= Constants.MIN_BALANCE) {
+            if (machineBalance <= configs[MIN_BALANCE_KEY]) {
                 // Fund the machine adress balance
-                IERC20(Constants.FUNDING_TOKEN).safeTransfer(machineAddress, Constants.FUNDING_AMOUNT);
+                IERC20(Constants.FUNDING_TOKEN).safeTransfer(machineAddress, configs[FUNDING_AMOUNT_KEY]);
             }
         }
     }
