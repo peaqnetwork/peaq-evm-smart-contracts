@@ -29,11 +29,10 @@ contract MachineStationFactoryTest is Test {
         keccak256("TransferMachineStationBalance(address newMachineStationAddress,uint256 nonce)");
 
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce)");
+        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
-    bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH = keccak256(
-        "ExecuteMachineTransaction(address machineOwner,address machineAddress,address target,bytes data,uint256 nonce)"
-    );
+    bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH =
+        keccak256("ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
     bytes32 private constant EXECUTE_MACHINE_TRANSFER_TYPEHASH = keccak256(
         "ExecutexecuteMachineTransferBalance(address machineOwner,address machineAddress,address recipientAddress,uint256 nonce"
@@ -48,7 +47,9 @@ contract MachineStationFactoryTest is Test {
         stationManger = vm.addr(stationMangerPrivateKey);
         user = vm.addr(userPrivateKey);
 
-        factory = new MachineStationFactory(admin, stationManger);
+        uint256 refundAmount = 100 ether;
+
+        factory = new MachineStationFactory(admin, stationManger, refundAmount);
     }
 
     function testTransferMachineStationBalance() public {
@@ -84,8 +85,9 @@ contract MachineStationFactoryTest is Test {
         address target = address(0x456);
         bytes memory data = abi.encodeWithSignature("someFunction()");
         uint256 nonce = 0;
+        uint256 refundAmount = 10000000;
 
-        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce));
+        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
         bytes32 digest = _hashTypedDataV4(factory.getDomainSeparator(), structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
@@ -96,7 +98,7 @@ contract MachineStationFactoryTest is Test {
         vm.mockCall(target, data, abi.encode());
 
         vm.prank(stationManger);
-        factory.executeTransaction(target, data, nonce, signature);
+        factory.executeTransaction(target, data, nonce, refundAmount, signature);
     }
 
     function testInvalidDomainSeparator() public {

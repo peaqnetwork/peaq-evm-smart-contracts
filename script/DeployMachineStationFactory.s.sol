@@ -9,10 +9,11 @@ contract DeployGasStation is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address admin = vm.envAddress("ADMIN_ADDRESS");
         address stationManager = vm.envAddress("STATION_MANAGER_ADDRESS");
+        uint256 _txRefundAmount = uint256(vm.envInt("TX_REFUND_AMOUNT"));
 
         vm.startBroadcast(deployerPrivateKey);
 
-        MachineStationFactory factory = new MachineStationFactory(admin, stationManager);
+        MachineStationFactory factory = new MachineStationFactory(admin, stationManager, _txRefundAmount);
 
         vm.stopBroadcast();
 
