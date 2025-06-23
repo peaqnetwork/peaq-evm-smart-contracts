@@ -331,7 +331,8 @@ contract MachineStationFactory is EIP712, AccessControl {
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, signature);
 
-        return hasRole(DEFAULT_ADMIN_ROLE, signer);
+        return (hasRole(DEFAULT_ADMIN_ROLE, signer) ||
+            hasRole(STATION_MANAGER_ROLE, signer));
     }
 
     /**
