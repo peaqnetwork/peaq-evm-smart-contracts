@@ -48,7 +48,7 @@ contract MachineStationFactory is EIP712, AccessControl {
     mapping(uint256 => bool) private usedNonces;
     mapping(bytes32 => uint256) public configs;
 
-    constructor(address admin, address stationManager, uint256 _txRefundAmount) EIP712("MachineStationFactory", "1") {
+    constructor(address admin, address stationManager, uint256 _txRefundAmount) EIP712("MachineStationFactory", "2") {
         if (admin == address(0)) revert Errors.ZeroAddress();
         if (stationManager == address(0)) revert Errors.ZeroAddress();
 
