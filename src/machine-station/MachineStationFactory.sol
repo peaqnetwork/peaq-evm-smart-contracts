@@ -15,9 +15,6 @@ contract MachineStationFactory is EIP712, AccessControl {
 
     bytes32 public constant STATION_MANAGER_ROLE = keccak256("STATION_MANAGER_ROLE");
     bytes32 public constant REQUIRED_STORAGE_DEPOSIT_FEE_ROLE = keccak256("REQUIRED_STORAGE_DEPOSIT_FEE_ROLE");
-    // The target address which tx are approved to be refunded
-    bytes32 public constant REFUNDABLE_TARGET_CALL_ROLE =
-        keccak256("REFUNDABLE_TARGET_CALL_ROLE");
     bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY =
         keccak256("TX_FEE_REFUND_AMOUNT");
     bytes32 public constant IS_REFUND_ENABLED_KEY =
@@ -74,9 +71,6 @@ contract MachineStationFactory is EIP712, AccessControl {
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_DID);
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_RBAC);
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_STORAGE);
-        _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_DID);
-        _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_RBAC);
-        _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_STORAGE);
     }
 
     function updateConfigs(bytes32 key, uint256 value)
