@@ -25,7 +25,7 @@ contract MachineSmartAccount is EIP712, AccessControl {
 
     mapping(uint256 => bool) public usedNonces;
 
-    constructor(address _owner, address machineStation) EIP712("MachineSmartAccount", "1") {
+    constructor(address _owner, address machineStation) EIP712("MachineSmartAccount", "2") {
         if (_owner == address(0)) revert Errors.ZeroAddress(); // Owner address cannot be zero
         if (machineStation == address(0)) revert Errors.ZeroAddress(); // Machine Station cannot be zero
         owner = _owner;
@@ -56,9 +56,6 @@ contract MachineSmartAccount is EIP712, AccessControl {
      * @param nonce Protects against replay attack.
      */
     function execute(address target, bytes calldata data, uint256 nonce, bytes calldata signature) external {
-        if (!hasRole(MACHINE_STATION_ROLE, msg.sender) && msg.sender != owner) {
-            revert Errors.NotAuthorized(msg.sender);
-        }
 
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
 
@@ -87,10 +84,6 @@ contract MachineSmartAccount is EIP712, AccessControl {
     function executeBatch(address[] memory targets, bytes[] calldata data, uint256 nonce, bytes calldata signature)
         external
     {
-        if (!hasRole(MACHINE_STATION_ROLE, msg.sender) && msg.sender != owner) {
-            revert Errors.NotAuthorized(msg.sender);
-        }
-
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
 
         bytes32 dataHash = _hashData(data);

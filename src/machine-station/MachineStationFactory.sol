@@ -22,6 +22,8 @@ contract MachineStationFactory is EIP712, AccessControl {
         keccak256("TX_FEE_REFUND_AMOUNT");
     bytes32 public constant IS_REFUND_ENABLED_KEY =
         keccak256("IS_REFUND_ENABLED");
+    bytes32 public constant CHECK_REFUND_MIN_BALANCE_KEY =
+        keccak256("CHECK_REFUND_MIN_BALANCE");
     bytes32 public constant MIN_BALANCE_KEY = keccak256("MIN_BALANCE");
     bytes32 public constant FUNDING_AMOUNT_KEY = keccak256("FUNDING_AMOUNT");
 
@@ -56,6 +58,9 @@ contract MachineStationFactory is EIP712, AccessControl {
         configs[TX_FEE_REFUND_AMOUNT_KEY] = _txRefundAmount;
         // enable refund by default. set this to 0 to disable refund
         configs[IS_REFUND_ENABLED_KEY] = 1;
+        // enable refund minimum balance check by default. 
+        // Set this to 0 to disable balance check before applying tx fee refund
+        configs[CHECK_REFUND_MIN_BALANCE_KEY] = 1;
         // minimum balance an address should have before storage deposit funding is triggered
         // set to PEAQ's default: 0.01 tokens in 18 decimals
         configs[MIN_BALANCE_KEY] = 10000000000000000;
@@ -370,9 +375,12 @@ contract MachineStationFactory is EIP712, AccessControl {
             // Transfer tokens with balance validation
             // This transfer is only done if fundding token is not null and refund amount is > 0
             if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
-                // Fetch sender's balance
-                uint256 senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
-
+                uint256 senderBalance = 0;
+                // check if sender has enough balance only when the feature is enabled
+                if (configs[CHECK_REFUND_MIN_BALANCE_KEY] > 0) {
+                    // Fetch sender's balance
+                    senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
+                }
                 // Check if the sender balance is less than tx fee amount before refund
                 if (senderBalance <= amount) {
                     // Refund the sender address
