@@ -281,7 +281,7 @@ class PeaqGetRealCampaignClass {
     ): Promise<string> {
         const domain = {
           name: "MachineSmartAccount", 
-          version: "1", 
+          version: "2", 
           chainId: chainID,
           verifyingContract: machineAddress,
         };

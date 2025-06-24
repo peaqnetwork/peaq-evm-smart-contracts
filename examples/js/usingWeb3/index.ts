@@ -596,7 +596,7 @@ class MachineStationFactoryExample {
     // Step 1: Define the EIP-712 Domain
     const domain = {
       name: "MachineSmartAccount",
-      version: "1",
+      version: "2",
       chainId: chainID,
       verifyingContract: machineAddress,
     };
@@ -661,7 +661,7 @@ class MachineStationFactoryExample {
     // Step 1: Define the EIP-712 Domain
     const domain = {
       name: "MachineSmartAccount",
-      version: "1",
+      version: "2",
       chainId: chainID,
       verifyingContract: machineAddress,
     };
@@ -731,7 +731,7 @@ class MachineStationFactoryExample {
   ): Promise<string> {
     const domain = {
       name: "MachineSmartAccount",
-      version: "1",
+      version: "2",
       chainId: chainID,
       verifyingContract: machineAddress,
     };
