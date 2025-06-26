@@ -11,14 +11,11 @@ contract DeployGasStation is Script {
         address adminAddress = vm.envAddress("ADMIN_ADDRESS");
         uint256 adminPrivateKey = vm.envUint("ADMIN_PRIVATE_KEY");
 
-
         address stationManager = vm.envAddress("STATION_MANAGER_ADDRESS");
         // Uncomment below if you want to use the stationManager account to update the configs
         // uint256 stationManagerPrivateKey = vm.envUint("STATION_MANAGER_PRIVATE_KEY");
 
-
         uint256 _txRefundAmount = uint256(vm.envInt("TX_REFUND_AMOUNT"));
-
 
         bytes32 minBalanceKey = keccak256(abi.encodePacked(vm.envString("MIN_BALANCE_KEY")));
         uint256 minBalanceValueAgung = uint256(vm.envInt("MIN_BALANCE_VALUE_AGUNG"));
