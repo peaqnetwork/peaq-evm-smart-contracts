@@ -57,7 +57,7 @@ contract MachineStationFactory is EIP712, AccessControl {
         configs[IS_REFUND_ENABLED_KEY] = 1;
         // enable refund minimum balance check by default. 
         // Set this to 0 to disable balance check before applying tx fee refund
-        configs[CHECK_REFUND_MIN_BALANCE_KEY] = 1;
+        configs[CHECK_REFUND_MIN_BALANCE_KEY] = 0;
         // minimum balance an address should have before storage deposit funding is triggered
         // set to PEAQ's default: 0.01 tokens in 18 decimals
         configs[MIN_BALANCE_KEY] = 10000000000000000;
