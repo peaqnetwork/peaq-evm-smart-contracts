@@ -56,7 +56,6 @@ contract MachineSmartAccount is EIP712, AccessControl {
      * @param nonce Protects against replay attack.
      */
     function execute(address target, bytes calldata data, uint256 nonce, bytes calldata signature) external {
-
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
 
         bytes32 userOpHash = keccak256(abi.encode(EXECUTE_TYPEHASH, target, keccak256(data), nonce));

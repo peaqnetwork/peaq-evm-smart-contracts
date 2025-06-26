@@ -15,28 +15,19 @@ contract GasRefundFactory is EIP712, AccessControl {
     // This role approves refundable transactions
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     // The target address which tx are approved to be refunded
-    bytes32 public constant REFUNDABLE_TARGET_CALL_ROLE =
-        keccak256("REFUNDABLE_TARGET_CALL_ROLE");
-    bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY =
-        keccak256("TX_FEE_REFUND_AMOUNT");
-    bytes32 public constant IS_REFUND_ENABLED_KEY =
-        keccak256("IS_REFUND_ENABLED");
+    bytes32 public constant REFUNDABLE_TARGET_CALL_ROLE = keccak256("REFUNDABLE_TARGET_CALL_ROLE");
+    bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY = keccak256("TX_FEE_REFUND_AMOUNT");
+    bytes32 public constant IS_REFUND_ENABLED_KEY = keccak256("IS_REFUND_ENABLED");
 
     // EIP-712 type hashes
 
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
-        keccak256(
-            "ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)"
-        );
+        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
     mapping(uint256 => bool) private usedNonces;
     mapping(bytes32 => uint256) public configs;
 
-    constructor(
-        address admin,
-        address manager,
-        uint256 _refundAmount
-    ) EIP712("GasRefundFactory", "1") {
+    constructor(address admin, address manager, uint256 _refundAmount) EIP712("GasRefundFactory", "1") {
         if (admin == address(0)) revert Errors.ZeroAddress();
         if (manager == address(0)) revert Errors.ZeroAddress();
 
@@ -53,10 +44,7 @@ contract GasRefundFactory is EIP712, AccessControl {
         _grantRole(REFUNDABLE_TARGET_CALL_ROLE, Constants.PEAQ_STORAGE);
     }
 
-    function updateConfigs(bytes32 key, uint256 value)
-        external
-        onlyRole(MANAGER_ROLE)
-    {
+    function updateConfigs(bytes32 key, uint256 value) external onlyRole(MANAGER_ROLE) {
         configs[key] = value;
     }
 
@@ -64,30 +52,17 @@ contract GasRefundFactory is EIP712, AccessControl {
      * @dev Transfer the contract balance to a recipient: useful in the event this contract is deprecated.
      * @param recipient The recipient address
      */
-    function transferBalance(address recipient, uint256 nonce)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function transferBalance(address recipient, uint256 nonce) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (Constants.FUNDING_TOKEN == address(0)) revert Errors.ZeroAddress();
         if (recipient == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
         usedNonces[nonce] = true;
 
-        uint256 contractBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(
-            address(this)
-        );
-        IERC20(Constants.FUNDING_TOKEN).safeTransfer(
-            recipient,
-            contractBalance
-        );
+        uint256 contractBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(address(this));
+        IERC20(Constants.FUNDING_TOKEN).safeTransfer(recipient, contractBalance);
 
-        emit Events.MachineStationBalanceTransferred(
-            address(this),
-            recipient,
-            contractBalance,
-            nonce
-        );
+        emit Events.MachineStationBalanceTransferred(address(this), recipient, contractBalance, nonce);
     }
 
     /**
@@ -109,15 +84,8 @@ contract GasRefundFactory is EIP712, AccessControl {
         if (target == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
-        bytes32 structHash = keccak256(
-            abi.encode(
-                EXECUTE_TRANSACTION_TYPEHASH,
-                target,
-                keccak256(data),
-                nonce,
-                refundAmount
-            )
-        );
+        bytes32 structHash =
+            keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
         if (!_verifySignature(structHash, signature, nonce)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
@@ -132,7 +100,7 @@ contract GasRefundFactory is EIP712, AccessControl {
         }
         _refundTxFees(msg.sender, txFeeRefundAmount);
 
-        (bool success, ) = target.call(data);
+        (bool success,) = target.call(data);
         if (!success) {
             revert Errors.TargetCallFailed(target);
         }
@@ -150,18 +118,13 @@ contract GasRefundFactory is EIP712, AccessControl {
      * @param signature The signature to verify.
      * @param nonce Protects against replay attack.
      */
-    function _verifySignature(
-        bytes32 structHash,
-        bytes memory signature,
-        uint256 nonce
-    ) internal view returns (bool) {
+    function _verifySignature(bytes32 structHash, bytes memory signature, uint256 nonce) internal view returns (bool) {
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, signature);
 
-        return (hasRole(DEFAULT_ADMIN_ROLE, signer) ||
-            hasRole(MANAGER_ROLE, signer));
+        return (hasRole(DEFAULT_ADMIN_ROLE, signer) || hasRole(MANAGER_ROLE, signer));
     }
 
     /**

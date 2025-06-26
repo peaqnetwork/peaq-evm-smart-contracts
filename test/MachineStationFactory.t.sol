@@ -31,8 +31,9 @@ contract MachineStationFactoryTest is Test {
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
         keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
-    bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce,uint256 refundAmount)");
+    bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH = keccak256(
+        "ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce,uint256 refundAmount)"
+    );
 
     bytes32 private constant EXECUTE_MACHINE_TRANSFER_TYPEHASH = keccak256(
         "ExecutexecuteMachineTransferBalance(address machineOwner,address machineAddress,address recipientAddress,uint256 nonce"
@@ -97,7 +98,8 @@ contract MachineStationFactoryTest is Test {
         // Mint tokens to the factory contract using the mocked token at FUNDING_TOKEN address
         MockERC20(fundingToken).mint(address(factory), refundAmount);
 
-        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
+        bytes32 structHash =
+            keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
         bytes32 digest = _hashTypedDataV4(factory.getDomainSeparator(), structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);

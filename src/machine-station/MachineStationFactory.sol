@@ -15,12 +15,9 @@ contract MachineStationFactory is EIP712, AccessControl {
 
     bytes32 public constant STATION_MANAGER_ROLE = keccak256("STATION_MANAGER_ROLE");
     bytes32 public constant REQUIRED_STORAGE_DEPOSIT_FEE_ROLE = keccak256("REQUIRED_STORAGE_DEPOSIT_FEE_ROLE");
-    bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY =
-        keccak256("TX_FEE_REFUND_AMOUNT");
-    bytes32 public constant IS_REFUND_ENABLED_KEY =
-        keccak256("IS_REFUND_ENABLED");
-    bytes32 public constant CHECK_REFUND_MIN_BALANCE_KEY =
-        keccak256("CHECK_REFUND_MIN_BALANCE");
+    bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY = keccak256("TX_FEE_REFUND_AMOUNT");
+    bytes32 public constant IS_REFUND_ENABLED_KEY = keccak256("IS_REFUND_ENABLED");
+    bytes32 public constant CHECK_REFUND_MIN_BALANCE_KEY = keccak256("CHECK_REFUND_MIN_BALANCE");
     bytes32 public constant MIN_BALANCE_KEY = keccak256("MIN_BALANCE");
     bytes32 public constant FUNDING_AMOUNT_KEY = keccak256("FUNDING_AMOUNT");
 
@@ -34,8 +31,9 @@ contract MachineStationFactory is EIP712, AccessControl {
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
         keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
-    bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce,uint256 refundAmount)");
+    bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH = keccak256(
+        "ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce,uint256 refundAmount)"
+    );
 
     bytes32 private constant EXECUTE_MACHINE_BATCH_TRANSACTIONS_TYPEHASH = keccak256(
         "ExecuteMachineBatchTransactions(address[] machineAddresses,address[] targets,bytes[] data,uint256 nonce,uint256 refundAmount,uint256[] machineNonces)"
@@ -55,7 +53,7 @@ contract MachineStationFactory is EIP712, AccessControl {
         configs[TX_FEE_REFUND_AMOUNT_KEY] = _txRefundAmount;
         // enable refund by default. set this to 0 to disable refund
         configs[IS_REFUND_ENABLED_KEY] = 1;
-        // enable refund minimum balance check by default. 
+        // enable refund minimum balance check by default.
         // Set this to 0 to disable balance check before applying tx fee refund
         configs[CHECK_REFUND_MIN_BALANCE_KEY] = 0;
         // minimum balance an address should have before storage deposit funding is triggered
@@ -73,10 +71,7 @@ contract MachineStationFactory is EIP712, AccessControl {
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_STORAGE);
     }
 
-    function updateConfigs(bytes32 key, uint256 value)
-        external
-        onlyRole(STATION_MANAGER_ROLE)
-    {
+    function updateConfigs(bytes32 key, uint256 value) external onlyRole(STATION_MANAGER_ROLE) {
         configs[key] = value;
     }
 
@@ -145,13 +140,18 @@ contract MachineStationFactory is EIP712, AccessControl {
      * @param data The calldata for the transaction sent to the target contract address
      * @param signature The signature verifying the owner's tx approval.
      */
-    function executeTransaction(address target, bytes calldata data, uint256 nonce, uint256 refundAmount, bytes calldata signature)
-        external
-    {
+    function executeTransaction(
+        address target,
+        bytes calldata data,
+        uint256 nonce,
+        uint256 refundAmount,
+        bytes calldata signature
+    ) external {
         if (target == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
-        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
+        bytes32 structHash =
+            keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
         if (!_verifySignature(structHash, signature, nonce)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
@@ -197,8 +197,11 @@ contract MachineStationFactory is EIP712, AccessControl {
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
 
         // Verify the owner's signature
-        bytes32 structHash =
-            keccak256(abi.encode(EXECUTE_MACHINE_TRANSACTION_TYPEHASH, machineAddress, target, keccak256(data), nonce, refundAmount));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                EXECUTE_MACHINE_TRANSACTION_TYPEHASH, machineAddress, target, keccak256(data), nonce, refundAmount
+            )
+        );
 
         if (!_verifySignature(structHash, signature, nonce)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce); // Invalid Machine Station Owner signature
@@ -330,8 +333,7 @@ contract MachineStationFactory is EIP712, AccessControl {
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, signature);
 
-        return (hasRole(DEFAULT_ADMIN_ROLE, signer) ||
-            hasRole(STATION_MANAGER_ROLE, signer));
+        return (hasRole(DEFAULT_ADMIN_ROLE, signer) || hasRole(STATION_MANAGER_ROLE, signer));
     }
 
     /**
