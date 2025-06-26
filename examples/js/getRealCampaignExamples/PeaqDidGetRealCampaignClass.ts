@@ -10,6 +10,10 @@ import axios from 'axios';
 import {abi} from '../MachineStationFactoryABI.json';
 import { CustomDocumentFields } from '@peaq-network/sdk/src/modules/did';
 
+// Load environment variables
+import { config } from "dotenv";
+config();
+
 // peaq RPC URL: https://peaq.api.onfinality.io/public
 const rpcURL = "https://erpc-async.agung.peaq.network"; // replace with peaq RPC URL during mainnet deployment. 
 const chainID = 3338;
@@ -23,6 +27,10 @@ const abiCoder = new AbiCoder();
 // Wallet details
 const ownerPrivateKey: string | undefined = process.env.CONTRACT_OWNER_PRIVATE_KEY??""; // Replace with owner wallet's private key
 const machineOwnerPrivateKey: string | undefined = process.env.MACHINE_OWNER_PRIVATE_KEY??""; // Replace with machine owner wallet's private key
+
+if (!ownerPrivateKey || !machineOwnerPrivateKey) {
+  throw new Error("Owner or Machine Owner Private Key not provided");
+}
 
 const provider = new ethers.JsonRpcProvider(rpcURL);
 const ownerAccount = new ethers.Wallet(ownerPrivateKey, provider);
@@ -120,7 +128,7 @@ class PeaqGetRealCampaignClass {
     async submitDIDTx() {
       try {
         const machineOwner = machineOwnerAccount.address;
-        const nonce = this.getRandomNonce();
+        let nonce = this.getRandomNonce();
         const target = "0x0000000000000000000000000000000000000800";
        
         // deploy a Machine Smart Account
@@ -169,6 +177,7 @@ class PeaqGetRealCampaignClass {
     
         const calldata = params.replace("0x", createDidFunctionSelector);
     
+        nonce = this.getRandomNonce();
         const machineOwnerSignature = await this.machineOwnerSignTypedDataExecuteMachine(machineAddress, target, calldata, nonce);
         const ownerSignature = await this.ownerSignTypedDataExecuteMachineTransaction(machineAddress, target, calldata, nonce);
     
