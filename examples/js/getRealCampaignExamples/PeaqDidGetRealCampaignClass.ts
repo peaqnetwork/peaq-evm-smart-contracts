@@ -129,6 +129,7 @@ class PeaqGetRealCampaignClass {
       try {
         const machineOwner = machineOwnerAccount.address;
         let nonce = this.getRandomNonce();
+        const refundAmount = BigInt(0);
         const target = "0x0000000000000000000000000000000000000800";
        
         // deploy a Machine Smart Account
@@ -179,13 +180,14 @@ class PeaqGetRealCampaignClass {
     
         nonce = this.getRandomNonce();
         const machineOwnerSignature = await this.machineOwnerSignTypedDataExecuteMachine(machineAddress, target, calldata, nonce);
-        const ownerSignature = await this.ownerSignTypedDataExecuteMachineTransaction(machineAddress, target, calldata, nonce);
+        const ownerSignature = await this.ownerSignTypedDataExecuteMachineTransaction(machineAddress, target, calldata, nonce, refundAmount);
     
         await this.executeMachineTransaction(
           machineAddress,
           target,
           calldata,
           nonce,
+          refundAmount,
           ownerSignature,
           machineOwnerSignature
         );
@@ -200,6 +202,7 @@ class PeaqGetRealCampaignClass {
             target: string,
             data: string,
             nonce: BigInt,
+            refundAmount: BigInt,
             signature: string,
             machineOwnerSignature: string
         ): Promise<void> {
@@ -207,7 +210,7 @@ class PeaqGetRealCampaignClass {
     
             const methodData = contract.interface.encodeFunctionData(
               "executeMachineTransaction",
-              [machineAddress, target, data, nonce, signature, machineOwnerSignature]
+              [machineAddress, target, data, nonce, refundAmount, signature, machineOwnerSignature]
             );
       
             // Send the transaction and get the receipt
@@ -254,7 +257,7 @@ class PeaqGetRealCampaignClass {
       ): Promise<string> {
         const domain = {
           name: "MachineStationFactory",
-          version: "1",
+          version: "2",
           chainId: chainID,
           verifyingContract: MachineStationFactoryContractAddress,
         };
@@ -287,7 +290,7 @@ class PeaqGetRealCampaignClass {
     ): Promise<string> {
         const domain = {
           name: "MachineSmartAccount", 
-          version: "1", 
+          version: "2", 
           chainId: chainID,
           verifyingContract: machineAddress,
         };
@@ -312,40 +315,43 @@ class PeaqGetRealCampaignClass {
     }
 
     async ownerSignTypedDataExecuteMachineTransaction(
-        machineAddress: string,
-        target: string,
-        data: string,
-        nonce: BigInt,
-      ): Promise<string> {
-        // Step 1: Define the EIP-712 Domain
-        const domain = {
-          name: "MachineStationFactory", 
-          version: "1", 
-          chainId: chainID,
-          verifyingContract: MachineStationFactoryContractAddress,
-        };
-      
-        const types = {
-          ExecuteMachineTransaction: [
-            { name: "machineAddress", type: "address" },
-            { name: "target", type: "address" },
-            { name: "data", type: "bytes" },
-            { name: "nonce", type: "uint256" },
-          ],
-        };
-    
-        const message = {
-          machineAddress: machineAddress,
-          target: target,
-          data: data,
-          nonce: nonce,
-        };
-      
-      
-        const signature = await ownerAccount.signTypedData(domain, types, message);
-      
-        return signature;
-    }
+    machineAddress: string,
+    target: string,
+    data: string,
+    nonce: BigInt,
+    refundAmount: BigInt,
+  ): Promise<string> {
+    // Step 1: Define the EIP-712 Domain
+    const domain = {
+      name: "MachineStationFactory",
+      version: "2",
+      chainId: chainID,
+      verifyingContract: MachineStationFactoryContractAddress,
+    };
+
+    const types = {
+      ExecuteMachineTransaction: [
+        { name: "machineAddress", type: "address" },
+        { name: "target", type: "address" },
+        { name: "data", type: "bytes" },
+        { name: "nonce", type: "uint256" },
+        { name: "refundAmount", type: "uint256" },
+      ],
+    };
+
+    const message = {
+      machineAddress: machineAddress,
+      target: target,
+      data: data,
+      nonce: nonce,
+      refundAmount: refundAmount,
+    };
+
+
+    const signature = await ownerAccount.signTypedData(domain, types, message);
+
+    return signature;
+  }
 
     // Helper function to sign and send transactions
     async sendTransaction(

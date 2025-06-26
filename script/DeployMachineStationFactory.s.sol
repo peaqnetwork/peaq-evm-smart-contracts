@@ -3,27 +3,21 @@ pragma solidity 0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
 import {MachineStationFactory} from "../src/machine-station/MachineStationFactory.sol";
-import {MachineStationFactory as MachineStationFactoryTestnet} from
-    "../src/machine-station/agung/MachineStationFactory.sol";
 
 contract DeployGasStation is Script {
-    function run() external returns (address factory) {
+    function run() external returns (MachineStationFactory) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address admin = vm.envAddress("ADMIN_ADDRESS");
         address stationManager = vm.envAddress("STATION_MANAGER_ADDRESS");
-        bool isTestnet = vm.envBool("IS_TESTNET");
+        uint256 _txRefundAmount = uint256(vm.envInt("TX_REFUND_AMOUNT"));
 
         vm.startBroadcast(deployerPrivateKey);
 
-        if (isTestnet) {
-            factory = address(new MachineStationFactoryTestnet(admin, stationManager));
-        } else {
-            factory = address(new MachineStationFactory(admin, stationManager));
-        }
+        MachineStationFactory factory = new MachineStationFactory(admin, stationManager, _txRefundAmount);
 
         vm.stopBroadcast();
 
-        console.log("MachineStationFactory deployed to:", factory);
+        console.log("MachineStationFactory deployed to:", address(factory));
         console.log("Admin address:", admin);
         console.log("Station Manager address:", stationManager);
 

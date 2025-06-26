@@ -26,7 +26,7 @@ contract MachineSmartAccount is EIP712, AccessControl, ReentrancyGuard {
 
     mapping(uint256 => bool) public usedNonces;
 
-    constructor(address _owner, address machineStation) EIP712("MachineSmartAccount", "1") {
+    constructor(address _owner, address machineStation) EIP712("MachineSmartAccount", "2") {
         if (_owner == address(0)) revert Errors.ZeroAddress(); // Owner address cannot be zero
         if (machineStation == address(0)) revert Errors.ZeroAddress(); // Machine Station cannot be zero
         owner = _owner;
@@ -60,10 +60,6 @@ contract MachineSmartAccount is EIP712, AccessControl, ReentrancyGuard {
         external
         nonReentrant
     {
-        if (!hasRole(MACHINE_STATION_ROLE, msg.sender) && msg.sender != owner) {
-            revert Errors.NotAuthorized(msg.sender);
-        }
-
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
 
         bytes32 userOpHash = keccak256(abi.encode(EXECUTE_TYPEHASH, target, keccak256(data), nonce));
@@ -92,9 +88,6 @@ contract MachineSmartAccount is EIP712, AccessControl, ReentrancyGuard {
         external
         nonReentrant
     {
-        if (!hasRole(MACHINE_STATION_ROLE, msg.sender) && msg.sender != owner) {
-            revert Errors.NotAuthorized(msg.sender);
-        }
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
         if (targets.length != data.length) {
             revert Errors.InvalidMachineAddressTargetsDataLength();

@@ -39,6 +39,7 @@ class PeaqGetRealCampaignClass {
   async submitGetRealStorageTx() {
     try {
         const nonce = this.getRandomNonce();
+        const refundAmount = BigInt(0);
         const target = '0x0000000000000000000000000000000000000801';
   
         const addItemFunctionSignature = "addItem(bytes,bytes)";
@@ -74,9 +75,9 @@ class PeaqGetRealCampaignClass {
         );
   
         const calldata = params.replace("0x", addItemFunctionSelector);
-        const ownerSignature = await this.ownerSignTypedDataExecuteTransaction(target, calldata, nonce)
+        const ownerSignature = await this.ownerSignTypedDataExecuteTransaction(target, calldata, nonce, refundAmount)
   
-        await this.executeTransaction(target, calldata, nonce, ownerSignature,);
+        await this.executeTransaction(target, calldata, nonce, refundAmount,  ownerSignature,);
     } catch (error) {
         console.error('Error:', error);
     }
@@ -86,13 +87,14 @@ class PeaqGetRealCampaignClass {
       target: string,
       data: string,
       nonce: BigInt,
+      refundAmount: BigInt,
       signature: string,
     ): Promise<void> {
       try {
         // Encode the method call data
         const methodData = contract.interface.encodeFunctionData(
           "executeTransaction",
-          [target, data, nonce, signature]
+          [target, data, nonce, refundAmount, signature]
         );
 
         // Send the transaction and get the receipt
@@ -137,6 +139,7 @@ class PeaqGetRealCampaignClass {
       target: string,
       data: string,
       nonce: BigInt,
+      refundAmount: BigInt,
     ): Promise<string> {
       // Step 1: Define the EIP-712 Domain
       const domain = {
@@ -151,6 +154,7 @@ class PeaqGetRealCampaignClass {
           { name: "target", type: "address" },
           { name: "data", type: "bytes" },
           { name: "nonce", type: "uint256" },
+          { name: "refundAmount", type: "uint256" },
         ],
       };
   
@@ -158,6 +162,7 @@ class PeaqGetRealCampaignClass {
         target: target,
         data: data,
         nonce: nonce,
+        refundAmount: refundAmount,
       };
     
       const signature = await ownerAccount.signTypedData(domain, types, message);

@@ -29,10 +29,10 @@ contract MachineStationFactoryTest is Test {
         keccak256("TransferMachineStationBalance(address newMachineStationAddress,uint256 nonce)");
 
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce)");
+        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
     bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH = keccak256(
-        "ExecuteMachineTransaction(address machineOwner,address machineAddress,address target,bytes data,uint256 nonce)"
+        "ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce,uint256 refundAmount)"
     );
 
     bytes32 private constant EXECUTE_MACHINE_TRANSFER_TYPEHASH = keccak256(
@@ -48,7 +48,9 @@ contract MachineStationFactoryTest is Test {
         stationManger = vm.addr(stationMangerPrivateKey);
         user = vm.addr(userPrivateKey);
 
-        factory = new MachineStationFactory(admin, stationManger);
+        uint256 refundAmount = 100 ether;
+
+        factory = new MachineStationFactory(admin, stationManger, refundAmount);
     }
 
     function testTransferMachineStationBalance() public {
@@ -84,8 +86,20 @@ contract MachineStationFactoryTest is Test {
         address target = address(0x456);
         bytes memory data = abi.encodeWithSignature("someFunction()");
         uint256 nonce = 0;
+        uint256 refundAmount = 100 ether;
 
-        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce));
+        //  mock ERC20 at the FUNDING_TOKEN address (0x809)
+        address fundingToken = address(0x0000000000000000000000000000000000000809);
+        MockERC20 token = new MockERC20("PEAQ Token", "PEAQ");
+
+        // Etch the mock token to the FUNDING_TOKEN address
+        vm.etch(fundingToken, address(token).code);
+
+        // Mint tokens to the factory contract using the mocked token at FUNDING_TOKEN address
+        MockERC20(fundingToken).mint(address(factory), refundAmount);
+
+        bytes32 structHash =
+            keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
         bytes32 digest = _hashTypedDataV4(factory.getDomainSeparator(), structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
@@ -95,8 +109,11 @@ contract MachineStationFactoryTest is Test {
         vm.etch(target, hex"00");
         vm.mockCall(target, data, abi.encode());
 
-        vm.prank(stationManger);
-        factory.executeTransaction(target, data, nonce, signature);
+        vm.prank(user);
+        factory.executeTransaction(target, data, nonce, refundAmount, signature);
+        // Verify the tx refund amount was transferred
+        assertEq(MockERC20(fundingToken).balanceOf(user), refundAmount);
+        assertEq(MockERC20(fundingToken).balanceOf(address(factory)), 0);
     }
 
     function testInvalidDomainSeparator() public {
@@ -130,7 +147,18 @@ contract MachineStationFactoryTest is Test {
     }
 
     function testNonceReplayProtectionAcrossFunctions() public {
-        uint256 nonce = 0;
+        uint256 nonce = 1;
+        uint256 refundAmount = 100 ether;
+
+        //  mock ERC20 at the FUNDING_TOKEN address (0x809)
+        address fundingToken = address(0x0000000000000000000000000000000000000809);
+        MockERC20 token = new MockERC20("PEAQ Token", "PEAQ");
+
+        // Etch the mock token to the FUNDING_TOKEN address
+        vm.etch(fundingToken, address(token).code);
+
+        // Mint tokens to the factory contract using the mocked token at FUNDING_TOKEN address
+        MockERC20(fundingToken).mint(address(factory), refundAmount);
 
         bytes32 deployStructHash = keccak256(abi.encode(DEPLOY_MACHINE_TYPEHASH, user, nonce));
         bytes32 deployDigest = _hashTypedDataV4(factory.getDomainSeparator(), deployStructHash);

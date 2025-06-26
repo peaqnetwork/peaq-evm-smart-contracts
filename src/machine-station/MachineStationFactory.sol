@@ -17,6 +17,11 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
     bytes32 public constant STATION_ADMIN_ROLE = keccak256("STATION_ADMIN_ROLE");
     bytes32 public constant STATION_MANAGER_ROLE = keccak256("STATION_MANAGER_ROLE");
     bytes32 public constant REQUIRED_STORAGE_DEPOSIT_FEE_ROLE = keccak256("REQUIRED_STORAGE_DEPOSIT_FEE_ROLE");
+    bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY = keccak256("TX_FEE_REFUND_AMOUNT");
+    bytes32 public constant IS_REFUND_ENABLED_KEY = keccak256("IS_REFUND_ENABLED");
+    bytes32 public constant CHECK_REFUND_MIN_BALANCE_KEY = keccak256("CHECK_REFUND_MIN_BALANCE");
+    bytes32 public constant MIN_BALANCE_KEY = keccak256("MIN_BALANCE");
+    bytes32 public constant FUNDING_AMOUNT_KEY = keccak256("FUNDING_AMOUNT");
 
     // EIP-712 type hashes
     bytes32 private constant DEPLOY_MACHINE_TYPEHASH =
@@ -26,29 +31,50 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         keccak256("TransferMachineStationBalance(address newMachineStationAddress,uint256 nonce)");
 
     bytes32 private constant EXECUTE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce)");
+        keccak256("ExecuteTransaction(address target,bytes data,uint256 nonce,uint256 refundAmount)");
 
-    bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH =
-        keccak256("ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce)");
+    bytes32 private constant EXECUTE_MACHINE_TRANSACTION_TYPEHASH = keccak256(
+        "ExecuteMachineTransaction(address machineAddress,address target,bytes data,uint256 nonce,uint256 refundAmount)"
+    );
 
     bytes32 private constant EXECUTE_MACHINE_BATCH_TRANSACTIONS_TYPEHASH = keccak256(
-        "ExecuteMachineBatchTransactions(address[] machineAddresses,address[] targets,bytes[] data,uint256 nonce,uint256[] machineNonces)"
+        "ExecuteMachineBatchTransactions(address[] machineAddresses,address[] targets,bytes[] data,uint256 nonce,uint256 refundAmount,uint256[] machineNonces)"
     );
 
     bytes32 private constant EXECUTE_MACHINE_TRANSFER_TYPEHASH =
         keccak256("ExecuteMachineTransferBalance(address machineAddress,address recipientAddress,uint256 nonce)");
 
-    mapping(uint256 => bool) public usedNonces;
+    mapping(uint256 => bool) private usedNonces;
+    mapping(bytes32 => uint256) public configs;
 
-    constructor(address admin, address stationManager) EIP712("MachineStationFactory", "1") {
+    constructor(address admin, address stationManager, uint256 _txRefundAmount) EIP712("MachineStationFactory", "2") {
         if (admin == address(0)) revert Errors.ZeroAddress();
         if (stationManager == address(0)) revert Errors.ZeroAddress();
+
+        // set the refund amount per tx
+        configs[TX_FEE_REFUND_AMOUNT_KEY] = _txRefundAmount;
+        // enable refund by default. set this to 0 to disable refund
+        configs[IS_REFUND_ENABLED_KEY] = 1;
+        // enable refund minimum balance check by default.
+        // Set this to 0 to disable balance check before applying tx fee refund
+        configs[CHECK_REFUND_MIN_BALANCE_KEY] = 0;
+        // minimum balance an address should have before storage deposit funding is triggered
+        // set to PEAQ's default: 0.01 tokens in 18 decimals
+        configs[MIN_BALANCE_KEY] = 10000000000000000;
+        // funding amount transferred to an address for storage deposit payment
+        // set to PEAQ's default: 0.05 tokens in 18 decimals
+        configs[FUNDING_AMOUNT_KEY] = 50000000000000000;
+
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(STATION_ADMIN_ROLE, admin);
+        _grantRole(STATION_MANAGER_ROLE, admin);
         _grantRole(STATION_MANAGER_ROLE, stationManager);
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_DID);
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_RBAC);
         _grantRole(REQUIRED_STORAGE_DEPOSIT_FEE_ROLE, Constants.PEAQ_STORAGE);
+    }
+
+    function updateConfigs(bytes32 key, uint256 value) external onlyRole(STATION_MANAGER_ROLE) {
+        configs[key] = value;
     }
 
     /**
@@ -74,6 +100,9 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
 
         // Deploy a new instance of MachineSmartAccount
         MachineSmartAccount newMachineSmartAccount = new MachineSmartAccount(machineOwner, address(this));
+
+        // fund the machine owner with the first tx fee needed to trigger the first tx
+        _refundTxFees(machineOwner, configs[TX_FEE_REFUND_AMOUNT_KEY]);
 
         emit Events.MachineSmartAccountDeployed(address(newMachineSmartAccount));
         return address(newMachineSmartAccount);
@@ -115,21 +144,32 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
      * @param data The calldata for the transaction sent to the target contract address
      * @param signature The signature verifying the owner's tx approval.
      */
-    function executeTransaction(address target, bytes calldata data, uint256 nonce, bytes calldata signature)
-        external
-        nonReentrant
-        onlyRole(STATION_MANAGER_ROLE)
-    {
+    function executeTransaction(
+        address target,
+        bytes calldata data,
+        uint256 nonce,
+        uint256 refundAmount,
+        bytes calldata signature
+    ) external nonReentrant {
         if (target == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
-        bytes32 structHash = keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce));
+        bytes32 structHash =
+            keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
         if (!_verifySignature(structHash, signature, nonce)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
         }
 
         usedNonces[nonce] = true;
+        uint256 txFeeRefundAmount = refundAmount;
+
+        // use default refund amount if custom refund amount is not supplied
+        if (txFeeRefundAmount < 1) {
+            txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
+        }
+        _refundTxFees(msg.sender, txFeeRefundAmount);
+
         (bool success,) = target.call(data);
 
         if (!success) {
@@ -152,22 +192,33 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         address target,
         bytes calldata data,
         uint256 nonce,
+        uint256 refundAmount,
         bytes calldata signature,
         bytes calldata machineOwnerSignature
-    ) external nonReentrant onlyRole(STATION_MANAGER_ROLE) {
+    ) external nonReentrant {
         if (machineAddress == address(0)) revert Errors.ZeroAddress(); // Machine address cannot be zero
         if (target == address(0)) revert Errors.ZeroAddress(); // Target address cannot be zero
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
 
         // Verify the owner's signature
-        bytes32 structHash =
-            keccak256(abi.encode(EXECUTE_MACHINE_TRANSACTION_TYPEHASH, machineAddress, target, keccak256(data), nonce));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                EXECUTE_MACHINE_TRANSACTION_TYPEHASH, machineAddress, target, keccak256(data), nonce, refundAmount
+            )
+        );
 
         if (!_verifySignature(structHash, signature, nonce)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce); // Invalid Machine Station Owner signature
         }
 
         usedNonces[nonce] = true;
+        uint256 txFeeRefundAmount = refundAmount;
+
+        // use default refund amount if custom refund amount is not supplied
+        if (txFeeRefundAmount < 1) {
+            txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
+        }
+        _refundTxFees(msg.sender, txFeeRefundAmount);
 
         _fundStorageDepositFees(machineAddress, target);
 
@@ -188,10 +239,11 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         address[] memory targets,
         bytes[] calldata data,
         uint256 nonce,
+        uint256 refundAmount,
         uint256[] memory machineNonces,
         bytes calldata signature,
         bytes[] calldata machineOwnerSignatures
-    ) external nonReentrant onlyRole(STATION_MANAGER_ROLE) {
+    ) external nonReentrant {
         if (machineAddresses.length < 1) revert Errors.EmptyAddressesArray(); // Machine address cannot be empty
         if (targets.length < 1) revert Errors.EmptyAddressesArray(); // Target addresses cannot be empty
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
@@ -213,6 +265,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
                 keccak256(abi.encodePacked(targets)),
                 _hashData(data),
                 nonce,
+                refundAmount,
                 keccak256(abi.encodePacked(machineNonces))
             )
         );
@@ -222,6 +275,13 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         }
 
         usedNonces[nonce] = true;
+        uint256 txFeeRefundAmount = refundAmount;
+
+        // use default refund amount if custom refund amount is not supplied
+        if (txFeeRefundAmount < 1) {
+            txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
+        }
+        _refundTxFees(msg.sender, txFeeRefundAmount);
 
         for (uint256 i = 0; i < machineAddresses.length; i++) {
             _fundStorageDepositFees(machineAddresses[i], targets[i]);
@@ -284,7 +344,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, signature);
 
-        return (hasRole(DEFAULT_ADMIN_ROLE, signer) || hasRole(STATION_ADMIN_ROLE, signer));
+        return (hasRole(DEFAULT_ADMIN_ROLE, signer) || hasRole(STATION_MANAGER_ROLE, signer));
     }
 
     /**
@@ -309,14 +369,30 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
             // Check if the machine balance is less than min balance before funding it
             // This is added because each machine account is required to pay a storage deposit fees by the peaq storage, rbac and did contracts
             // while using the on-chain storage
-            if (machineBalance <= Constants.MIN_BALANCE) {
-                // Check if the factory balance is sufficient to fund the machine address
-                uint256 factoryBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(address(this));
-                if (factoryBalance < Constants.FUNDING_AMOUNT) {
-                    revert Errors.InsufficientFactoryBalance(factoryBalance, Constants.FUNDING_AMOUNT);
+            if (machineBalance <= configs[MIN_BALANCE_KEY]) {
+                // Fund the machine adress balance
+                IERC20(Constants.FUNDING_TOKEN).safeTransfer(machineAddress, configs[FUNDING_AMOUNT_KEY]);
+            }
+        }
+    }
+
+    function _refundTxFees(address sender, uint256 amount) private {
+        //  only refund tx fees if enabled
+        if (configs[IS_REFUND_ENABLED_KEY] > 0) {
+            // Transfer tokens with balance validation
+            // This transfer is only done if fundding token is not null and refund amount is > 0
+            if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
+                uint256 senderBalance = 0;
+                // check if sender has enough balance only when the feature is enabled
+                if (configs[CHECK_REFUND_MIN_BALANCE_KEY] > 0) {
+                    // Fetch sender's balance
+                    senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
                 }
-                // Fund the machine address balance
-                IERC20(Constants.FUNDING_TOKEN).safeTransfer(machineAddress, Constants.FUNDING_AMOUNT);
+                // Check if the sender balance is less than tx fee amount before refund
+                if (senderBalance <= amount) {
+                    // Refund the sender address
+                    IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
+                }
             }
         }
     }

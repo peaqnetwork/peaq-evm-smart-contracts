@@ -2,15 +2,7 @@
 
 This repository contains the smart contracts for PEAQ's EVM Gas Station implementation, built using Foundry.
 
-## Overview
-
-The Gas Station Factory enables gasless transactions for machines on the PEAQ network, allowing them to execute transactions without holding native tokens. Key features include:
-
-- Machine Smart Account deployment
-- Gasless transaction execution
-- Balance management for gas station operations
-- EIP-712 compliant signatures
-- Role-based access control
+Check each contract sub directory for respective documentation.
 
 ## Documentation
 
