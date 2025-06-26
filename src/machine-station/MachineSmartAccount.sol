@@ -4,15 +4,16 @@ pragma solidity 0.8.25;
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Errors} from "../libs/Errors.sol";
 import {Events} from "../libs/Events.sol";
 import {Constants} from "../libs/Constants.sol";
 
-contract MachineSmartAccount is EIP712, AccessControl {
+contract MachineSmartAccount is EIP712, AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    address public owner;
+    address public immutable owner;
 
     bytes32 public constant MACHINE_STATION_ROLE = keccak256("MACHINE_STATION_ROLE");
 
@@ -55,7 +56,10 @@ contract MachineSmartAccount is EIP712, AccessControl {
      * @param signature The signature verifying the machine owner tx approval.
      * @param nonce Protects against replay attack.
      */
-    function execute(address target, bytes calldata data, uint256 nonce, bytes calldata signature) external {
+    function execute(address target, bytes calldata data, uint256 nonce, bytes calldata signature)
+        external
+        nonReentrant
+    {
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
 
         bytes32 userOpHash = keccak256(abi.encode(EXECUTE_TYPEHASH, target, keccak256(data), nonce));
@@ -68,7 +72,7 @@ contract MachineSmartAccount is EIP712, AccessControl {
         (bool success,) = target.call(data);
 
         if (!success) {
-            revert Errors.TargetCallFailed(target);
+            revert Errors.TargetCallFailed(target, data);
         }
         emit Events.MachineTransactionExecuted(msg.sender, address(this), target);
     }
@@ -82,8 +86,15 @@ contract MachineSmartAccount is EIP712, AccessControl {
      */
     function executeBatch(address[] memory targets, bytes[] calldata data, uint256 nonce, bytes calldata signature)
         external
+        nonReentrant
     {
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
+        if (targets.length != data.length) {
+            revert Errors.InvalidMachineAddressTargetsDataLength();
+        }
+        if (targets.length > Constants.MAX_BATCH_TRANSACTIONS) {
+            revert Errors.MaxBatchTransactionExceeded(Constants.MAX_BATCH_TRANSACTIONS, targets.length);
+        }
 
         bytes32 dataHash = _hashData(data);
 
@@ -122,6 +133,7 @@ contract MachineSmartAccount is EIP712, AccessControl {
      */
     function transferMachineBalance(address recipientAddress, uint256 nonce, bytes calldata signature)
         external
+        nonReentrant
         onlyRole(MACHINE_STATION_ROLE)
     {
         if (Constants.FUNDING_TOKEN == address(0)) revert Errors.ZeroAddress();

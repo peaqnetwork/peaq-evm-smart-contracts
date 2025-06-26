@@ -102,7 +102,7 @@ contract GasRefundFactory is EIP712, AccessControl {
 
         (bool success,) = target.call(data);
         if (!success) {
-            revert Errors.TargetCallFailed(target);
+            revert Errors.TargetCallFailed(target, data);
         }
 
         emit Events.TransactionExecuted(target, data, nonce, msg.sender);
