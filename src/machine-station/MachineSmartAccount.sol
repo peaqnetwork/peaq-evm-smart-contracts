@@ -76,7 +76,7 @@ contract MachineSmartAccount is EIP712, AccessControl, ReentrancyGuard {
         (bool success,) = target.call(data);
 
         if (!success) {
-            revert Errors.TargetCallFailed(target);
+            revert Errors.TargetCallFailed(target, data);
         }
         emit Events.MachineTransactionExecuted(msg.sender, address(this), target);
     }

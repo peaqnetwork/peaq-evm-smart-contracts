@@ -133,7 +133,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         (bool success,) = target.call(data);
 
         if (!success) {
-            revert Errors.TargetCallFailed(target);
+            revert Errors.TargetCallFailed(target, data);
         }
 
         emit Events.TransactionExecuted(target, data, nonce, msg.sender);
@@ -310,7 +310,12 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
             // This is added because each machine account is required to pay a storage deposit fees by the peaq storage, rbac and did contracts
             // while using the on-chain storage
             if (machineBalance <= Constants.MIN_BALANCE) {
-                // Fund the machine adress balance
+                // Check if the factory balance is sufficient to fund the machine address
+                uint256 factoryBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(address(this));
+                if (factoryBalance < Constants.FUNDING_AMOUNT) {
+                    revert Errors.InsufficientFactoryBalance(factoryBalance, Constants.FUNDING_AMOUNT);
+                }
+                // Fund the machine address balance
                 IERC20(Constants.FUNDING_TOKEN).safeTransfer(machineAddress, Constants.FUNDING_AMOUNT);
             }
         }
