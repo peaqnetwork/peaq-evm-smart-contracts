@@ -1,76 +1,60 @@
 # PEAQ EVM Smart Contracts
 
-This repository contains the smart contracts for PEAQ's EVM Gas Station implementation, built using Foundry.
+This repository contains the smart contracts for PEAQ's EVM Gas Station implementation, built using Foundry or Hardhat.
 
-Check each contract sub directory for respective documentation.
+## Overview
 
-## Documentation
+The Gas Station Factory enables gasless transactions for machines on the PEAQ network, allowing them to execute transactions without holding native tokens. Key features include:
 
-https://book.getfoundry.sh/
+- Machine Smart Account deployment
+- Gasless transaction execution
+- Balance management for gas station operations
+- EIP-712 compliant signatures
+- Role-based access control
 
-## Usage
 
-### Build
+## Usage Forge
 
-```shell
-$ forge build
-```
+### Install Forge
+https://getfoundry.sh/introduction/installation/
 
-### Test
+### Create and set .env file:
+Look at the `.env.example` for a structure. Prefix keys and addresses with `0x`
 
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
+### Compile Contracts
 
 ```shell
-$ forge snapshot
+forge build
 ```
+### Deploy
+You have the option to either deploy on PEAQ or AGUNG networks. For testing purposes default to AGUNG.
 
-### Anvil
+There is a slight differentiation between the gas fees between the networks. Please use the `.env.example` defined values for generic configuration.
 
-```shell
-$ anvil
-```
 
-### Environment
-
-Copy `.env.example` to `.env` and update the values.
+#### Deploy on PEAQ
 
 ```
-$ cp .env.example .env
+forge script script/foundry/DeployMachineStationFactory.s.sol:DeployGasStation --rpc-url <rpc_url> --broadcast
 ```
 
-```bash
-IS_TESTNET=          # true/false - Network environment flag
-PRIVATE_KEY=         # Deployer wallet private key
-ADMIN_ADDRESS=       # Admin wallet address
-STATION_MANAGER_ADDRESS= # Station manager contract address
+#### Deploy AGUNG
+```
+forge script script/foundry/DeployMachineStationFactoryAGUNG.s.sol:DeployGasStation --rpc-url <rpc_url> --broadcast --gas-estimate-multiplier 300 --slow
+```
+
+## Usage HardHat
+### Install Packages
+```
+npm install
 ```
 
 ### Deploy
-
-```shell
-$ forge script script/DeployMachineStationFactory.s.sol:DeployGasStation --broadcast --rpc-url <your_rpc_url> -- --env-file .env
+#### Deploy on PEAQ
 ```
-
-### Cast
-
-```shell
-$ cast <subcommand>
+npx hardhat run script/hardhat/DeployMachineStationFactory.js --network peaq
 ```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+#### Deploy on AGUNG
+```
+npx hardhat run script/hardhat/DeployMachineStationFactoryAGUNG.js --network agung
 ```
