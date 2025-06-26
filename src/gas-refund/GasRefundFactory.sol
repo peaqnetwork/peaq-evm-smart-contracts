@@ -4,12 +4,13 @@ pragma solidity 0.8.25;
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Errors} from "../libs/Errors.sol";
 import {Events} from "../libs/Events.sol";
 import {Constants} from "../libs/Constants.sol";
 
-contract GasRefundFactory is EIP712, AccessControl {
+contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // This role approves refundable transactions
@@ -18,6 +19,7 @@ contract GasRefundFactory is EIP712, AccessControl {
     bytes32 public constant REFUNDABLE_TARGET_CALL_ROLE = keccak256("REFUNDABLE_TARGET_CALL_ROLE");
     bytes32 public constant TX_FEE_REFUND_AMOUNT_KEY = keccak256("TX_FEE_REFUND_AMOUNT");
     bytes32 public constant IS_REFUND_ENABLED_KEY = keccak256("IS_REFUND_ENABLED");
+    bytes32 public constant CHECK_REFUND_MIN_BALANCE_KEY = keccak256("CHECK_REFUND_MIN_BALANCE");
 
     // EIP-712 type hashes
 
@@ -35,6 +37,9 @@ contract GasRefundFactory is EIP712, AccessControl {
         configs[TX_FEE_REFUND_AMOUNT_KEY] = _refundAmount;
         // enable refund by default. set this to 0 to disable refund
         configs[IS_REFUND_ENABLED_KEY] = 1;
+        // enable refund minimum balance check by default.
+        // Set this to 0 to disable balance check before applying tx fee refund
+        configs[CHECK_REFUND_MIN_BALANCE_KEY] = 0;
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MANAGER_ROLE, admin);
@@ -80,7 +85,7 @@ contract GasRefundFactory is EIP712, AccessControl {
         uint256 nonce,
         uint256 refundAmount,
         bytes calldata signature
-    ) external {
+    ) external nonReentrant {
         if (target == address(0)) revert Errors.ZeroAddress();
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
@@ -145,9 +150,12 @@ contract GasRefundFactory is EIP712, AccessControl {
             // Transfer tokens with balance validation
             // This transfer is only done if fundding token is not null and refund amount is > 0
             if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
-                // Fetch sender's balance
-                uint256 senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
-
+                uint256 senderBalance = 0;
+                // check if sender has enough balance only when the feature is enabled
+                if (configs[CHECK_REFUND_MIN_BALANCE_KEY] > 0) {
+                    // Fetch sender's balance
+                    senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
+                }
                 // Check if the sender balance is less than tx fee amount before refund
                 if (senderBalance <= amount) {
                     // Refund the sender address
