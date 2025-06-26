@@ -48,10 +48,25 @@ $ forge snapshot
 $ anvil
 ```
 
+### Environment
+
+Copy `.env.example` to `.env` and update the values.
+
+```
+$ cp .env.example .env
+```
+
+```bash
+IS_TESTNET=          # true/false - Network environment flag
+PRIVATE_KEY=         # Deployer wallet private key
+ADMIN_ADDRESS=       # Admin wallet address
+STATION_MANAGER_ADDRESS= # Station manager contract address
+```
+
 ### Deploy
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+$ forge script script/DeployMachineStationFactory.s.sol:DeployGasStation --broadcast --rpc-url <your_rpc_url> -- --env-file .env
 ```
 
 ### Cast
