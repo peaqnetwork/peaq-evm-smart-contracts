@@ -102,7 +102,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
 
         // Deploy a new instance of MachineSmartAccount
         MachineSmartAccount newMachineSmartAccount = new MachineSmartAccount(machineOwner, address(this));
-        
+
         // fund the machine owner with the first tx fee needed to trigger the first tx
         if (configs[IS_REFUND_ENABLED_KEY] != 0) {
             _refundTxFees(machineOwner, configs[TX_FEE_REFUND_AMOUNT_KEY]);
@@ -225,13 +225,11 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-        
 
         _fundStorageDepositFees(machineAddress, target);
 
         // Forward the call to the machine account to execute the target tx
-       try MachineSmartAccount(machineAddress).execute(target, data, nonce, machineOwnerSignature)
-        {
+        try MachineSmartAccount(machineAddress).execute(target, data, nonce, machineOwnerSignature) {
             //  only refund tx fees if enabled
             if (configs[IS_REFUND_ENABLED_KEY] != 0) {
                 _refundTxFees(msg.sender, txFeeRefundAmount);
@@ -296,8 +294,6 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-
-        
 
         uint256 totalSuccess;
 
