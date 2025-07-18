@@ -150,7 +150,7 @@ contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
             // Transfer tokens with balance validation
             // This transfer is only done if fundding token is not null and refund amount is > 0
             if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
-                uint256 senderBalance = 0;
+                uint256 senderBalance;
                 // check if sender has enough balance only when the feature is enabled
                 if (configs[CHECK_REFUND_MIN_BALANCE_KEY] > 0) {
                     // Fetch sender's balance
