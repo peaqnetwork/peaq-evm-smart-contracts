@@ -75,6 +75,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
 
     function updateConfigs(bytes32 key, uint256 value) external onlyRole(STATION_MANAGER_ROLE) {
         configs[key] = value;
+        emit Events.ConfigsUpdated(key, value);
     }
 
     /**
@@ -171,15 +172,15 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-        //  only refund tx fees if enabled
-        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
-            _refundTxFees(msg.sender, txFeeRefundAmount);
-        }
 
         (bool success,) = target.call(data);
 
         if (!success) {
             revert Errors.TargetCallFailed(target, data);
+        }
+        //  only refund tx fees if enabled
+        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+            _refundTxFees(msg.sender, txFeeRefundAmount);
         }
 
         emit Events.TransactionExecuted(target, data, nonce, msg.sender);
@@ -224,15 +225,20 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-        //  only refund tx fees if enabled
-        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
-            _refundTxFees(msg.sender, txFeeRefundAmount);
-        }
+        
 
         _fundStorageDepositFees(machineAddress, target);
 
         // Forward the call to the machine account to execute the target tx
-        MachineSmartAccount(machineAddress).execute(target, data, nonce, machineOwnerSignature);
+       try MachineSmartAccount(machineAddress).execute(target, data, nonce, machineOwnerSignature)
+        {
+            //  only refund tx fees if enabled
+            if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+                _refundTxFees(msg.sender, txFeeRefundAmount);
+            }
+        } catch {
+            emit Events.MachineTransactionFailed(msg.sender, machineAddress, target);
+        }
     }
 
     /**
@@ -291,18 +297,26 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
 
-        //  only refund tx fees if enabled
-        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
-            _refundTxFees(msg.sender, txFeeRefundAmount);
-        }
+        
+
+        uint256 totalSuccess;
 
         for (uint256 i; i < machineAddresses.length; ++i) {
             _fundStorageDepositFees(machineAddresses[i], targets[i]);
             // Forward the call to the machine account to execute the target tx
             try MachineSmartAccount(machineAddresses[i]).execute(
                 targets[i], data[i], machineNonces[i], machineOwnerSignatures[i]
-            ) {} catch {
+            ) {
+                ++totalSuccess;
+            } catch {
                 emit Events.BatchMachineTransactionFailed(machineAddresses[i], i);
+            }
+        }
+
+        if (totalSuccess != 0) {
+            //  only refund tx fees if enabled
+            if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+                _refundTxFees(msg.sender, txFeeRefundAmount);
             }
         }
     }

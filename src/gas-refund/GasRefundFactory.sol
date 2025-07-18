@@ -103,14 +103,15 @@ contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
         if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-        //  only refund tx fees if enabled
-        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
-            _refundTxFees(msg.sender, txFeeRefundAmount);
-        }
 
         (bool success,) = target.call(data);
         if (!success) {
             revert Errors.TargetCallFailed(target, data);
+        }
+
+        //  only refund tx fees if enabled
+        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+            _refundTxFees(msg.sender, txFeeRefundAmount);
         }
 
         emit Events.TransactionExecuted(target, data, nonce, msg.sender);
