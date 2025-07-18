@@ -100,7 +100,7 @@ contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
         uint256 txFeeRefundAmount = refundAmount;
 
         // use default refund amount if custom refund amount is not supplied
-        if (txFeeRefundAmount < 1) {
+        if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
         _refundTxFees(msg.sender, txFeeRefundAmount);
@@ -134,13 +134,13 @@ contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
 
     function _refundTxFees(address sender, uint256 amount) private {
         //  only refund tx fees if enabled
-        if (configs[IS_REFUND_ENABLED_KEY] > 0) {
+        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
             // Transfer tokens with balance validation
-            // This transfer is only done if fundding token is not null and refund amount is > 0
-            if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
+            // This transfer is only done if fundding token is not null and refund amount != 0
+            if (Constants.FUNDING_TOKEN != address(0) && amount != 0) {
                 uint256 senderBalance;
                 // check if sender has enough balance only when the feature is enabled
-                if (configs[CHECK_REFUND_MIN_BALANCE_KEY] > 0) {
+                if (configs[CHECK_REFUND_MIN_BALANCE_KEY] != 0) {
                     // Fetch sender's balance
                     senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
                 }
