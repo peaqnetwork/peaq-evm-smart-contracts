@@ -138,7 +138,7 @@ contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
      */
     function _hashData(bytes[] calldata data) private pure returns (bytes32) {
         bytes32[] memory encoded = new bytes32[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
+        for (uint256 i = 0; i < data.length; ++i) {
             encoded[i] = keccak256(data[i]);
         }
         return keccak256(abi.encodePacked(encoded));
