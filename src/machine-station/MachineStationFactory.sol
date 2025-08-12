@@ -310,8 +310,10 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         }
 
         if (totalSuccess != 0) {
-            //  only refund tx fees if enabled
+            //  Only refund tx fees if enabled
             if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+                // Refund amount based on the number of successful target calls
+                txFeeRefundAmount = totalSuccess * txFeeRefundAmount;
                 _refundTxFees(msg.sender, txFeeRefundAmount);
             }
         }
