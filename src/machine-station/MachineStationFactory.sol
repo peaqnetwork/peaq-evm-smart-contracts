@@ -75,6 +75,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
 
     function updateConfigs(bytes32 key, uint256 value) external onlyRole(STATION_MANAGER_ROLE) {
         configs[key] = value;
+        emit Events.ConfigsUpdated(key, value);
     }
 
     /**
@@ -89,10 +90,11 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         returns (address)
     {
         if (machineOwner == address(0)) revert Errors.ZeroAddress();
+        if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
 
         bytes32 structHash = keccak256(abi.encode(DEPLOY_MACHINE_TYPEHASH, machineOwner, nonce));
 
-        if (!_verifySignature(structHash, signature, nonce)) {
+        if (!_verifySignature(structHash, signature)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
         }
 
@@ -102,7 +104,9 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         MachineSmartAccount newMachineSmartAccount = new MachineSmartAccount(machineOwner, address(this));
 
         // fund the machine owner with the first tx fee needed to trigger the first tx
-        _refundTxFees(machineOwner, configs[TX_FEE_REFUND_AMOUNT_KEY]);
+        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+            _refundTxFees(machineOwner, configs[TX_FEE_REFUND_AMOUNT_KEY]);
+        }
 
         emit Events.MachineSmartAccountDeployed(address(newMachineSmartAccount));
         return address(newMachineSmartAccount);
@@ -124,7 +128,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
 
         bytes32 structHash = keccak256(abi.encode(TRANSFER_BALANCE_TYPEHASH, newMachineStationAddress, nonce));
 
-        if (!_verifySignature(structHash, signature, nonce)) {
+        if (!_verifySignature(structHash, signature)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
         }
         usedNonces[nonce] = true;
@@ -157,7 +161,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         bytes32 structHash =
             keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
-        if (!_verifySignature(structHash, signature, nonce)) {
+        if (!_verifySignature(structHash, signature)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
         }
 
@@ -165,15 +169,18 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         uint256 txFeeRefundAmount = refundAmount;
 
         // use default refund amount if custom refund amount is not supplied
-        if (txFeeRefundAmount < 1) {
+        if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-        _refundTxFees(msg.sender, txFeeRefundAmount);
 
         (bool success,) = target.call(data);
 
         if (!success) {
             revert Errors.TargetCallFailed(target, data);
+        }
+        //  only refund tx fees if enabled
+        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+            _refundTxFees(msg.sender, txFeeRefundAmount);
         }
 
         emit Events.TransactionExecuted(target, data, nonce, msg.sender);
@@ -207,7 +214,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
             )
         );
 
-        if (!_verifySignature(structHash, signature, nonce)) {
+        if (!_verifySignature(structHash, signature)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce); // Invalid Machine Station Owner signature
         }
 
@@ -215,15 +222,21 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         uint256 txFeeRefundAmount = refundAmount;
 
         // use default refund amount if custom refund amount is not supplied
-        if (txFeeRefundAmount < 1) {
+        if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-        _refundTxFees(msg.sender, txFeeRefundAmount);
 
         _fundStorageDepositFees(machineAddress, target);
 
         // Forward the call to the machine account to execute the target tx
-        MachineSmartAccount(machineAddress).execute(target, data, nonce, machineOwnerSignature);
+        try MachineSmartAccount(machineAddress).execute(target, data, nonce, machineOwnerSignature) {
+            //  only refund tx fees if enabled
+            if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+                _refundTxFees(msg.sender, txFeeRefundAmount);
+            }
+        } catch {
+            emit Events.MachineTransactionFailed(msg.sender, machineAddress, target);
+        }
     }
 
     /**
@@ -244,8 +257,8 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         bytes calldata signature,
         bytes[] calldata machineOwnerSignatures
     ) external nonReentrant {
-        if (machineAddresses.length < 1) revert Errors.EmptyAddressesArray(); // Machine address cannot be empty
-        if (targets.length < 1) revert Errors.EmptyAddressesArray(); // Target addresses cannot be empty
+        if (machineAddresses.length == 0) revert Errors.EmptyAddressesArray(); // Machine address cannot be empty
+        if (targets.length == 0) revert Errors.EmptyAddressesArray(); // Target addresses cannot be empty
         if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce); // Nonce already used
         if (machineAddresses.length != targets.length || machineAddresses.length != data.length) {
             revert Errors.InvalidMachineAddressTargetsDataLength();
@@ -270,7 +283,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
             )
         );
 
-        if (!_verifySignature(structHash, signature, nonce)) {
+        if (!_verifySignature(structHash, signature)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce); // Invalid Machine Station Owner signature
         }
 
@@ -278,18 +291,30 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         uint256 txFeeRefundAmount = refundAmount;
 
         // use default refund amount if custom refund amount is not supplied
-        if (txFeeRefundAmount < 1) {
+        if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-        _refundTxFees(msg.sender, txFeeRefundAmount);
 
-        for (uint256 i = 0; i < machineAddresses.length; i++) {
+        uint256 totalSuccess;
+
+        for (uint256 i; i < machineAddresses.length; ++i) {
             _fundStorageDepositFees(machineAddresses[i], targets[i]);
             // Forward the call to the machine account to execute the target tx
             try MachineSmartAccount(machineAddresses[i]).execute(
                 targets[i], data[i], machineNonces[i], machineOwnerSignatures[i]
-            ) {} catch {
+            ) {
+                ++totalSuccess;
+            } catch {
                 emit Events.BatchMachineTransactionFailed(machineAddresses[i], i);
+            }
+        }
+
+        if (totalSuccess != 0) {
+            //  Only refund tx fees if enabled
+            if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+                // Refund amount based on the number of successful target calls
+                txFeeRefundAmount = totalSuccess * txFeeRefundAmount;
+                _refundTxFees(msg.sender, txFeeRefundAmount);
             }
         }
     }
@@ -318,7 +343,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
         bytes32 structHash =
             keccak256(abi.encode(EXECUTE_MACHINE_TRANSFER_TYPEHASH, machineAddress, recipientAddress, nonce));
 
-        if (!_verifySignature(structHash, signature, nonce)) {
+        if (!_verifySignature(structHash, signature)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce); // Invalid Machine Station Owner signature
         }
 
@@ -336,11 +361,8 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
      * @dev Verify the owner signature.
      * @param structHash The hash of the signed message.
      * @param signature The signature to verify.
-     * @param nonce Protects against replay attack.
      */
-    function _verifySignature(bytes32 structHash, bytes memory signature, uint256 nonce) internal view returns (bool) {
-        if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
-
+    function _verifySignature(bytes32 structHash, bytes memory signature) internal view returns (bool) {
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, signature);
 
@@ -353,7 +375,7 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
      */
     function _hashData(bytes[] calldata data) private pure returns (bytes32) {
         bytes32[] memory encoded = new bytes32[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
+        for (uint256 i; i < data.length; ++i) {
             encoded[i] = keccak256(data[i]);
         }
         return keccak256(abi.encodePacked(encoded));
@@ -377,22 +399,19 @@ contract MachineStationFactory is EIP712, AccessControl, ReentrancyGuard {
     }
 
     function _refundTxFees(address sender, uint256 amount) private {
-        //  only refund tx fees if enabled
-        if (configs[IS_REFUND_ENABLED_KEY] > 0) {
-            // Transfer tokens with balance validation
-            // This transfer is only done if fundding token is not null and refund amount is > 0
-            if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
-                uint256 senderBalance = 0;
-                // check if sender has enough balance only when the feature is enabled
-                if (configs[CHECK_REFUND_MIN_BALANCE_KEY] > 0) {
-                    // Fetch sender's balance
-                    senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
-                }
-                // Check if the sender balance is less than tx fee amount before refund
-                if (senderBalance <= amount) {
-                    // Refund the sender address
-                    IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
-                }
+        // Transfer tokens with balance validation
+        // This transfer is only done if fundding token is not null and refund amount != 0
+        if (Constants.FUNDING_TOKEN != address(0) && amount != 0) {
+            uint256 senderBalance;
+            // check if sender has enough balance only when the feature is enabled
+            if (configs[CHECK_REFUND_MIN_BALANCE_KEY] != 0) {
+                // Fetch sender's balance
+                senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
+            }
+            // Check if the sender balance is less than tx fee amount before refund
+            if (senderBalance <= amount) {
+                // Refund the sender address
+                IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
             }
         }
     }

@@ -92,7 +92,7 @@ contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
         bytes32 structHash =
             keccak256(abi.encode(EXECUTE_TRANSACTION_TYPEHASH, target, keccak256(data), nonce, refundAmount));
 
-        if (!_verifySignature(structHash, signature, nonce)) {
+        if (!_verifySignature(structHash, signature)) {
             revert Errors.InvalidOwnerSignature(structHash, nonce);
         }
 
@@ -100,14 +100,18 @@ contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
         uint256 txFeeRefundAmount = refundAmount;
 
         // use default refund amount if custom refund amount is not supplied
-        if (txFeeRefundAmount < 1) {
+        if (txFeeRefundAmount == 0) {
             txFeeRefundAmount = configs[TX_FEE_REFUND_AMOUNT_KEY];
         }
-        _refundTxFees(msg.sender, txFeeRefundAmount);
 
         (bool success,) = target.call(data);
         if (!success) {
             revert Errors.TargetCallFailed(target, data);
+        }
+
+        //  only refund tx fees if enabled
+        if (configs[IS_REFUND_ENABLED_KEY] != 0) {
+            _refundTxFees(msg.sender, txFeeRefundAmount);
         }
 
         emit Events.TransactionExecuted(target, data, nonce, msg.sender);
@@ -121,46 +125,28 @@ contract GasRefundFactory is EIP712, AccessControl, ReentrancyGuard {
      * @dev Verify the owner signature.
      * @param structHash The hash of the signed message.
      * @param signature The signature to verify.
-     * @param nonce Protects against replay attack.
      */
-    function _verifySignature(bytes32 structHash, bytes memory signature, uint256 nonce) internal view returns (bool) {
-        if (usedNonces[nonce]) revert Errors.NonceAlreadyUsed(nonce);
-
+    function _verifySignature(bytes32 structHash, bytes memory signature) internal view returns (bool) {
         bytes32 digest = _hashTypedDataV4(structHash);
         address signer = ECDSA.recover(digest, signature);
 
         return (hasRole(DEFAULT_ADMIN_ROLE, signer) || hasRole(MANAGER_ROLE, signer));
     }
 
-    /**
-     * @dev Hash the bytes[] data
-     * @param data The calldata to hash
-     */
-    function _hashData(bytes[] calldata data) private pure returns (bytes32) {
-        bytes32[] memory encoded = new bytes32[](data.length);
-        for (uint256 i = 0; i < data.length; i++) {
-            encoded[i] = keccak256(data[i]);
-        }
-        return keccak256(abi.encodePacked(encoded));
-    }
-
     function _refundTxFees(address sender, uint256 amount) private {
-        //  only refund tx fees if enabled
-        if (configs[IS_REFUND_ENABLED_KEY] > 0) {
-            // Transfer tokens with balance validation
-            // This transfer is only done if fundding token is not null and refund amount is > 0
-            if (Constants.FUNDING_TOKEN != address(0) && amount > 0) {
-                uint256 senderBalance = 0;
-                // check if sender has enough balance only when the feature is enabled
-                if (configs[CHECK_REFUND_MIN_BALANCE_KEY] > 0) {
-                    // Fetch sender's balance
-                    senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
-                }
-                // Check if the sender balance is less than tx fee amount before refund
-                if (senderBalance <= amount) {
-                    // Refund the sender address
-                    IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
-                }
+        // Transfer tokens with balance validation
+        // This transfer is only done if fundding token is not null and refund amount != 0
+        if (Constants.FUNDING_TOKEN != address(0) && amount != 0) {
+            uint256 senderBalance;
+            // check if sender has enough balance only when the feature is enabled
+            if (configs[CHECK_REFUND_MIN_BALANCE_KEY] != 0) {
+                // Fetch sender's balance
+                senderBalance = IERC20(Constants.FUNDING_TOKEN).balanceOf(sender);
+            }
+            // Check if the sender balance is less than tx fee amount before refund
+            if (senderBalance <= amount) {
+                // Refund the sender address
+                IERC20(Constants.FUNDING_TOKEN).safeTransfer(sender, amount);
             }
         }
     }
