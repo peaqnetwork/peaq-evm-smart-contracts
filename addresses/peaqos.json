@@ -1,0 +1,35 @@
+{
+    "layerzero_endpoints": {
+        "peaq_mainnet": {
+            "chain_id": "3338",
+            "address": "0x6F475642a6e85809B1c36Fa62763669b1b48DD5B",
+            "eid": "30302"
+        },
+        "base_mainnet": {
+            "chain_id": "8453",
+            "address": "0x1a44076050125825900e736c501f859c50fE728c",
+            "eid": "30184"
+        },
+        "base_sepolia": {
+            "chain_id": "84532",
+            "address": "0x6EDCE65403992e310A62460808c4b910D972f10f",
+            "eid": "40245"
+        }
+    },
+    "deployed_contracts": {
+        "peaq": {
+            "identity_registry": "0xb53Af985765031936311273599389b5B68aC9956",
+            "identity_staking": "0x11c05A650704136786253e8685f56879A202b1C7",
+            "event_registry": "0x09179D46153A2d7eB227bd97416D2cA707485D3E",
+            "wpeaq": "0x0000000000000000000000000000000000000809",
+            "machine_nft": "0x2943F80e9DdB11B9Dd275499C661Df78F5F691F9",
+            "machine_account_factory": "0x4A808d5A90A2c91739E92C70aF19924e0B3D527f",
+            "machine_nft_adapter": "0x9AD5408702EC204441A88589B99ADfC2514AFAE6",
+            "did": "0x0000000000000000000000000000000000000800",
+            "batch": "0x0000000000000000000000000000000000000805"
+        },
+        "base": {
+            "machine_nft_base": "0xee8A521eA434b11F956E2402beC5eBfa753Babfa"
+        }
+    }
+}
