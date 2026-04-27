@@ -20,11 +20,22 @@
         "peaq": {
             "identity_registry": "0xb53Af985765031936311273599389b5B68aC9956",
             "identity_staking": "0x11c05A650704136786253e8685f56879A202b1C7",
-            "event_registry": "0x09179D46153A2d7eB227bd97416D2cA707485D3E",
+            "event_registry": "0x43c6AF2E14dc1327dc3cc6c7117D1CD72fffEcbA",
             "wpeaq": "0x0000000000000000000000000000000000000809",
             "machine_nft": "0x2943F80e9DdB11B9Dd275499C661Df78F5F691F9",
             "machine_account_factory": "0x4A808d5A90A2c91739E92C70aF19924e0B3D527f",
             "machine_nft_adapter": "0x9AD5408702EC204441A88589B99ADfC2514AFAE6",
+            "did": "0x0000000000000000000000000000000000000800",
+            "batch": "0x0000000000000000000000000000000000000805"
+        },
+        "agung": {
+            "identity_registry": "0x9E9463a65c7B74623b3b6Cdc39F71be7274e5971",
+            "identity_staking": "0x55f336714aDb0749DbFE33b057a1702405564E3d",
+            "event_registry": "0x2DAD8905380993940e340C5cE6d313d5c2780040",
+            "wpeaq": "0x0000000000000000000000000000000000000809",
+            "machine_nft": "0xB41C2A4f1c19b6B06beaAce0F5CD8439e77C4b1c",
+            "machine_account_factory": "0x65a4DfEB799dFf8CF15f13816d648a7805d6b1F9",
+            "machine_nft_adapter": "0x63fD7e64A38e50D1486Bc569B4CaCeD38528De22",
             "did": "0x0000000000000000000000000000000000000800",
             "batch": "0x0000000000000000000000000000000000000805"
         },
