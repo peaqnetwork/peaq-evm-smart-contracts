@@ -35,7 +35,6 @@
             "wpeaq": "0x0000000000000000000000000000000000000809",
             "machine_nft": "0xB41C2A4f1c19b6B06beaAce0F5CD8439e77C4b1c",
             "machine_account_factory": "0x65a4DfEB799dFf8CF15f13816d648a7805d6b1F9",
-            "machine_nft_adapter": "0x63fD7e64A38e50D1486Bc569B4CaCeD38528De22",
             "did": "0x0000000000000000000000000000000000000800",
             "batch": "0x0000000000000000000000000000000000000805"
         },
